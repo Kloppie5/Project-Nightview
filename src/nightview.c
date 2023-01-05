@@ -17,6 +17,8 @@ int main ( ) {
     FindProcessByExecutable("C:\\Program Files (x86)\\Steam\\steamapps\\common\\Cultist Simulator\\cultistsimulator.exe", &hProcess);
     ProcessSummary(hProcess);
     EnumerateModules(hProcess);
+    HexDump(hProcess, (LPCVOID)0x330000, 0x1000);
+    EnumerateExportTable(hProcess, (LPCVOID)0x330000);
     return 0;
 }
 
