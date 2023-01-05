@@ -3,8 +3,12 @@
 
 #include <windows.h>
 
-int EnumerateModules ( HANDLE hProcess );
+int EnumerateProcesses();
 int FindProcessByExecutable ( char* executable, HANDLE* hProcess );
+
+int EnumerateModules ( HANDLE hProcess );
+int FindModuleByName ( HANDLE hProcess, char* name, HMODULE* hModule );
+
 int HexDump ( HANDLE hProcess, LPCVOID address, SIZE_T size );
 int EnumerateExportTable ( HANDLE hProcess, LPCVOID address );
 int ReadMemoryTest ( HANDLE hProcess, LPCVOID address, SIZE_T size );
