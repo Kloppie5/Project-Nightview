@@ -1,19 +1,33 @@
-SRC=./src
-TARGET=./target
-CC = gcc
-LDFLAGS =
-LIBS = -lpsapi
-RM = rm -rf
+MKDIR   := md
+RMDIR   := rd /S /Q
+CC      := gcc
 
-all: clean default run
+BIN     := ./bin
+OBJ     := ./obj
+INCLUDE := ./include
+
+SRC     := ./src
+SRCS    := $(wildcard $(SRC)/*.c)
+OBJS    := $(patsubst $(SRC)/%.c,$(OBJ)/%.o,$(SRCS))
+EXE     := $(BIN)/nightview.exe
+CFLAGS  := -I$(INCLUDE)
+LDLIBS  := -lpsapi
+
+all: default run
 
 clean:
-	$(RM) $(TARGET)/*.out
+	$(RMDIR) $(OBJ) $(BIN)
 
-default: nightview.c
+default: $(EXE)
 
-nightview.c:
-	$(CC) $(CFLAGS) $(SRC)/nightview.c $(LIBS) -o $(TARGET)/nightview.exe
+$(EXE): $(OBJS) | $(BIN)
+	$(CC) $(LDFLAGS) $^ $(LDLIBS) -o $@
 
-run:
-	$(TARGET)/nightview.exe
+$(OBJ)/%.o: $(SRC)/%.c | $(OBJ)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BIN) $(OBJ):
+	$(MKDIR) $@
+
+run: $(EXE)
+	$<

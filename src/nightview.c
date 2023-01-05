@@ -4,17 +4,19 @@
 #include <tchar.h>
 #include <stdio.h>
 
+#include "memory_handling.h"
+
 int EnumerateProcesses();
-int ProcessSummary(DWORD pid);
-int FindProcessByExecutable(char* executable, DWORD* pid);
-int ReadMemoryTest(DWORD pid, LPCVOID lpBaseAddress, SIZE_T nSize);
+int ProcessSummary(HANDLE hProcess);
+int FindProcessByExecutable(char* executable, HANDLE* hProcess);
+int ReadMemoryTest(HANDLE hProcess, LPCVOID address, SIZE_T size);
 
 int main ( ) {
     EnumerateProcesses();
-    DWORD pid = 0;
-    FindProcessByExecutable("C:\\Program Files (x86)\\Steam\\steamapps\\common\\Cultist Simulator\\cultistsimulator.exe", &pid);
-    ProcessSummary(pid);
-    ReadMemoryTest(pid, (LPCVOID)0x344018, 0x1000);
+    HANDLE hProcess;
+    FindProcessByExecutable("C:\\Program Files (x86)\\Steam\\steamapps\\common\\Cultist Simulator\\cultistsimulator.exe", &hProcess);
+    ProcessSummary(hProcess);
+    EnumerateModules(hProcess);
     return 0;
 }
 
@@ -42,29 +44,21 @@ int EnumerateProcesses ( ) {
     return 0;
 }
 
-int ProcessSummary ( DWORD pid ) {
-    HANDLE process = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
-    if ( process == NULL ) {
-        printf("Failed to open process\n");
-        return 1;
-    }
-
+int ProcessSummary ( HANDLE hProcess ) {
     TCHAR filename[MAX_PATH];
-    if ( !GetModuleFileNameEx(process, NULL, filename, MAX_PATH) ) {
+    if ( !GetModuleFileNameEx(hProcess, NULL, filename, MAX_PATH) ) {
         printf("Failed to get module filename\n");
         return 1;
     }
 
-    printf("Process %d: %s\n", pid, filename);
-
     PROCESS_MEMORY_COUNTERS pmc;
-    if ( !GetProcessMemoryInfo(process, &pmc, sizeof(pmc)) ) {
+    if ( !GetProcessMemoryInfo(hProcess, &pmc, sizeof(pmc)) ) {
         printf("Failed to get process memory info\n");
         return 1;
     }
 
     FILETIME creationTime, exitTime, kernelTime, userTime;
-    if ( !GetProcessTimes(process, &creationTime, &exitTime, &kernelTime, &userTime) ) {
+    if ( !GetProcessTimes(hProcess, &creationTime, &exitTime, &kernelTime, &userTime) ) {
         printf("Failed to get process times\n");
         return 1;
     }
@@ -72,12 +66,10 @@ int ProcessSummary ( DWORD pid ) {
     printf("Memory usage: %ld\n", pmc.WorkingSetSize);
     printf("Creation time: %ld\n", creationTime.dwLowDateTime);
 
-    CloseHandle(process);
-
     return 0;
 }
 
-int FindProcessByExecutable ( char* executable, DWORD* pid ) {
+int FindProcessByExecutable ( char* executable, HANDLE* hProcess ) {
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if ( snapshot == INVALID_HANDLE_VALUE ) {
         printf("Failed to create snapshot\n");
@@ -105,42 +97,16 @@ int FindProcessByExecutable ( char* executable, DWORD* pid ) {
             return 1;
         }
 
-        CloseHandle(process);
-
         if ( strcmp(filename, executable) == 0 ) {
             printf("Found process %s with pid %d\n", executable, pe.th32ProcessID);
-            *pid = pe.th32ProcessID;
+            *hProcess = process;
             break;
         }
+        
+        CloseHandle(process);
     } while( Process32Next(snapshot, &pe) );
 
     CloseHandle(snapshot);
 
     return 0;
-}
-
-int ReadMemoryTest ( DWORD pid, LPCVOID lpBaseAddress, SIZE_T nSize ) {
-    HANDLE hProcess = OpenProcess(PROCESS_VM_READ, FALSE, pid);
-    if ( hProcess == NULL ) {
-        printf("Failed to open process\n");
-        return 1;
-    }
-
-    LPVOID lpBuffer = VirtualAlloc(NULL, nSize, MEM_COMMIT, PAGE_READWRITE);
-    if ( lpBuffer == NULL ) {
-        printf("Failed to allocate buffer\n");
-        return 1;
-    }
-
-    SIZE_T lpNumberOfBytesRead;
-    if (!ReadProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, &lpNumberOfBytesRead)) {
-        printf("Failed to read process memory\n");
-        return 1;
-    }
-
-    printf("Read %d bytes from process memory;\n", lpNumberOfBytesRead);
-    printf("Buffer contents: %s\n", (char*)lpBuffer);
-
-    VirtualFree(lpBuffer, 0, MEM_RELEASE);
-    CloseHandle(hProcess);
 }
