@@ -5,18 +5,22 @@
 #include <stdio.h>
 
 #include "memory_handling.h"
+#include "golemancy.h"
 
 int main ( ) {
-    EnumerateProcesses();
     HANDLE hProcess;
     FindProcessByExecutable("C:\\Program Files (x86)\\Steam\\steamapps\\common\\Cultist Simulator\\cultistsimulator.exe", &hProcess);
-    
-    EnumerateModules(hProcess);
+    printf("hProcess: %d\n", hProcess);
+
     HMODULE hModule;
     FindModuleByName(hProcess, "mono-2.0-bdwgc.dll", &hModule);
-    printf("mono-2.0-bdwgc.dll: 0x%08X\n", hModule);
+    printf("hModule: %08X\n", hModule);
 
-    HexDump(hProcess, hModule, 0x1000);
-    EnumerateExportTable(hProcess, hModule);
+    DWORD address;
+    FindExportByName(hProcess, hModule, "mono_get_root_domain", &address);
+    printf("Address: %08X\n", address);
+    
+    ReadMonoRootDomain();
+    
     return 0;
 }

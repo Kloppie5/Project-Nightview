@@ -46,10 +46,8 @@ int FindProcessByExecutable ( char* executable, HANDLE* hProcess ) {
 
     do {
         HANDLE process = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pe.th32ProcessID);
-        if ( process == NULL ) {
-            printf("Failed to open process %d (%d); %s\n", pe.th32ProcessID, GetLastError(), pe.szExeFile);
+        if ( process == NULL )
             continue;
-        }
 
         TCHAR filename[MAX_PATH];
         if ( !GetModuleFileNameEx(process, NULL, filename, MAX_PATH) ) {
@@ -58,7 +56,6 @@ int FindProcessByExecutable ( char* executable, HANDLE* hProcess ) {
         }
 
         if ( strcmp(filename, executable) == 0 ) {
-            printf("Found process %s with pid %d\n", executable, pe.th32ProcessID);
             *hProcess = process;
             break;
         }
@@ -115,10 +112,8 @@ int FindModuleByName ( HANDLE hProcess, char* name, HMODULE* hModule ) {
 
         for ( int i = 0; i < numModules; ++i ) {
             TCHAR lpBaseName[MAX_PATH];
-            if ( !GetModuleBaseNameA(hProcess, hModules[i], lpBaseName, sizeof(lpBaseName)) ) {
-                printf("Failed to get module base name\n");
-                return 1;
-            }
+            if ( !GetModuleBaseNameA(hProcess, hModules[i], lpBaseName, sizeof(lpBaseName)) )
+                continue;
             
             if ( strcmp(lpBaseName, name) == 0 ) {
                 *hModule = hModules[i];
@@ -127,6 +122,100 @@ int FindModuleByName ( HANDLE hProcess, char* name, HMODULE* hModule ) {
         }
     }
     return 1;
+}
+
+int EnumerateExportTable ( HANDLE hProcess, LPCVOID lpBaseAddress ) {
+    PIMAGE_DOS_HEADER dosHeader = (PIMAGE_DOS_HEADER)malloc(sizeof(IMAGE_DOS_HEADER));
+    ReadProcessMemory(hProcess, lpBaseAddress, dosHeader, sizeof(IMAGE_DOS_HEADER), NULL);
+    
+    PIMAGE_NT_HEADERS32 ntHeader32 = (PIMAGE_NT_HEADERS32)malloc(sizeof(IMAGE_NT_HEADERS32));
+    ReadProcessMemory(hProcess, (LPCVOID)(lpBaseAddress + dosHeader->e_lfanew), ntHeader32, sizeof(IMAGE_NT_HEADERS32), NULL);
+    
+    PIMAGE_EXPORT_DIRECTORY exportDirectory = (PIMAGE_EXPORT_DIRECTORY)malloc(sizeof(IMAGE_EXPORT_DIRECTORY));
+    ReadProcessMemory(hProcess, (LPCVOID)(lpBaseAddress + ntHeader32->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress), exportDirectory, sizeof(IMAGE_EXPORT_DIRECTORY), NULL);
+    
+    DWORD* names = (DWORD*)malloc(exportDirectory->NumberOfNames * sizeof(DWORD));
+    ReadProcessMemory(hProcess, (LPCVOID)(lpBaseAddress + exportDirectory->AddressOfNames), names, exportDirectory->NumberOfNames * sizeof(DWORD), NULL);
+    WORD* ordinals = (WORD*)malloc(exportDirectory->NumberOfNames * sizeof(WORD));
+    ReadProcessMemory(hProcess, (LPCVOID)(lpBaseAddress + exportDirectory->AddressOfNameOrdinals), ordinals, exportDirectory->NumberOfNames * sizeof(WORD), NULL);
+    DWORD* addresses = (DWORD*)malloc(exportDirectory->NumberOfNames * sizeof(DWORD));
+    ReadProcessMemory(hProcess, (LPCVOID)(lpBaseAddress + exportDirectory->AddressOfFunctions), addresses, exportDirectory->NumberOfNames * sizeof(DWORD), NULL);
+
+    for ( int i = 0; i < exportDirectory->NumberOfNames; ++i ) {
+        char* name = (char*)malloc(256);
+        ReadProcessMemory(hProcess, (LPCVOID)(lpBaseAddress + names[i]), name, 256, NULL);
+        printf("%04X | %08X | %s\n", ordinals[i], addresses[ordinals[i]], name);
+        free(name);
+    }
+
+    free(names);
+    free(exportDirectory);
+    free(ntHeader32);
+    free(dosHeader);
+
+    return 0;
+}
+int FindExportByName ( HANDLE hProcess, LPCVOID lpBaseAddress, char* name, DWORD* address ) {
+    PIMAGE_DOS_HEADER dosHeader = (PIMAGE_DOS_HEADER)malloc(sizeof(IMAGE_DOS_HEADER));
+    ReadProcessMemory(hProcess, lpBaseAddress, dosHeader, sizeof(IMAGE_DOS_HEADER), NULL);
+    
+    PIMAGE_NT_HEADERS32 ntHeader32 = (PIMAGE_NT_HEADERS32)malloc(sizeof(IMAGE_NT_HEADERS32));
+    ReadProcessMemory(hProcess, (LPCVOID)(lpBaseAddress + dosHeader->e_lfanew), ntHeader32, sizeof(IMAGE_NT_HEADERS32), NULL);
+    
+    PIMAGE_EXPORT_DIRECTORY exportDirectory = (PIMAGE_EXPORT_DIRECTORY)malloc(sizeof(IMAGE_EXPORT_DIRECTORY));
+    ReadProcessMemory(hProcess, (LPCVOID)(lpBaseAddress + ntHeader32->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress), exportDirectory, sizeof(IMAGE_EXPORT_DIRECTORY), NULL);
+    
+    DWORD* names = (DWORD*)malloc(exportDirectory->NumberOfNames * sizeof(DWORD));
+    ReadProcessMemory(hProcess, (LPCVOID)(lpBaseAddress + exportDirectory->AddressOfNames), names, exportDirectory->NumberOfNames * sizeof(DWORD), NULL);
+    WORD* ordinals = (WORD*)malloc(exportDirectory->NumberOfNames * sizeof(WORD));
+    ReadProcessMemory(hProcess, (LPCVOID)(lpBaseAddress + exportDirectory->AddressOfNameOrdinals), ordinals, exportDirectory->NumberOfNames * sizeof(WORD), NULL);
+    DWORD* addresses = (DWORD*)malloc(exportDirectory->NumberOfNames * sizeof(DWORD));
+    ReadProcessMemory(hProcess, (LPCVOID)(lpBaseAddress + exportDirectory->AddressOfFunctions), addresses, exportDirectory->NumberOfNames * sizeof(DWORD), NULL);
+
+    for ( int i = 0; i < exportDirectory->NumberOfNames; ++i ) {
+        char* exportName = (char*)malloc(256);
+        ReadProcessMemory(hProcess, (LPCVOID)(lpBaseAddress + names[i]), exportName, 256, NULL);
+        if ( strcmp(exportName, name) == 0 ) {
+            *address = addresses[ordinals[i]];
+            free(exportName);
+            break;
+        }
+        free(exportName);
+    }
+
+    free(names);
+    free(exportDirectory);
+    free(ntHeader32);
+    free(dosHeader);
+
+    return address == NULL;
+}
+
+int ReadDWORD ( HANDLE hProcess, LPCVOID address, DWORD* result ) {
+    SIZE_T lpNumberOfBytesRead;
+    if ( !ReadProcessMemory(hProcess, address, result, sizeof(DWORD), &lpNumberOfBytesRead) ) {
+        printf("Failed to read process memory; %d\n", GetLastError());
+        return 1;
+    }
+    return 0;
+}
+int ReadMemoryTest ( HANDLE hProcess, LPCVOID lpBaseAddress, SIZE_T nSize ) {
+    LPVOID lpBuffer = VirtualAlloc(NULL, nSize, MEM_COMMIT, PAGE_READWRITE);
+    if ( lpBuffer == NULL ) {
+        printf("Failed to allocate buffer\n");
+        return 1;
+    }
+
+    SIZE_T lpNumberOfBytesRead;
+    if (!ReadProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, &lpNumberOfBytesRead)) {
+        printf("Failed to read process memory\n");
+        return 1;
+    }
+
+    printf("Read %d bytes from process memory;\n", lpNumberOfBytesRead);
+    printf("Buffer contents: %s\n", (char*)lpBuffer);
+
+    VirtualFree(lpBuffer, 0, MEM_RELEASE);
 }
 
 int HexDump ( HANDLE hProcess, LPCVOID lpBaseAddress, SIZE_T nSize ) {
@@ -143,7 +232,7 @@ int HexDump ( HANDLE hProcess, LPCVOID lpBaseAddress, SIZE_T nSize ) {
     }
 
     for ( int line = 0; line < lpNumberOfBytesRead; line += 32 ) {
-        printf("%08X: ", line);
+        printf("%08X: ", lpBaseAddress+line);
         for ( int i = 0; i < 32; ++i ) {
             if ( line + i < lpNumberOfBytesRead )
                 printf("%02X ", ((unsigned char*)lpBuffer)[line + i]);
@@ -163,56 +252,6 @@ int HexDump ( HANDLE hProcess, LPCVOID lpBaseAddress, SIZE_T nSize ) {
         }
         printf("\n");
     }
-
-    VirtualFree(lpBuffer, 0, MEM_RELEASE);
-}
-
-int EnumerateExportTable ( HANDLE hProcess, LPCVOID lpBaseAddress ) {
-    PIMAGE_DOS_HEADER dosHeader = (PIMAGE_DOS_HEADER)malloc(sizeof(IMAGE_DOS_HEADER));
-    ReadProcessMemory(hProcess, lpBaseAddress, dosHeader, sizeof(IMAGE_DOS_HEADER), NULL);
-    printf("e_lfanew: %08X\n", dosHeader->e_lfanew);
-
-    PIMAGE_NT_HEADERS32 ntHeader32 = (PIMAGE_NT_HEADERS32)malloc(sizeof(IMAGE_NT_HEADERS32));
-    ReadProcessMemory(hProcess, (LPCVOID)(lpBaseAddress + dosHeader->e_lfanew), ntHeader32, sizeof(IMAGE_NT_HEADERS32), NULL);
-    printf("Magic: %04X\n", ntHeader32->OptionalHeader.Magic);
-
-    PIMAGE_EXPORT_DIRECTORY exportDirectory = (PIMAGE_EXPORT_DIRECTORY)malloc(sizeof(IMAGE_EXPORT_DIRECTORY));
-    ReadProcessMemory(hProcess, (LPCVOID)(lpBaseAddress + ntHeader32->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress), exportDirectory, sizeof(IMAGE_EXPORT_DIRECTORY), NULL);
-    printf("NumberOfNames: %08X\n", exportDirectory->NumberOfNames);
-
-    DWORD* names = (DWORD*)malloc(exportDirectory->NumberOfNames * sizeof(DWORD));
-    ReadProcessMemory(hProcess, (LPCVOID)(lpBaseAddress + exportDirectory->AddressOfNames), names, exportDirectory->NumberOfNames * sizeof(DWORD), NULL);
-
-    for ( int i = 0; i < exportDirectory->NumberOfNames; ++i ) {
-        char* name = (char*)malloc(256);
-        ReadProcessMemory(hProcess, (LPCVOID)(lpBaseAddress + names[i]), name, 256, NULL);
-        printf("%s\n", name);
-        free(name);
-    }
-
-    free(names);
-    free(exportDirectory);
-    free(ntHeader32);
-    free(dosHeader);
-
-    return 0;
-}
-
-int ReadMemoryTest ( HANDLE hProcess, LPCVOID lpBaseAddress, SIZE_T nSize ) {
-    LPVOID lpBuffer = VirtualAlloc(NULL, nSize, MEM_COMMIT, PAGE_READWRITE);
-    if ( lpBuffer == NULL ) {
-        printf("Failed to allocate buffer\n");
-        return 1;
-    }
-
-    SIZE_T lpNumberOfBytesRead;
-    if (!ReadProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, &lpNumberOfBytesRead)) {
-        printf("Failed to read process memory\n");
-        return 1;
-    }
-
-    printf("Read %d bytes from process memory;\n", lpNumberOfBytesRead);
-    printf("Buffer contents: %s\n", (char*)lpBuffer);
 
     VirtualFree(lpBuffer, 0, MEM_RELEASE);
 }
