@@ -4,17 +4,23 @@
 #include <windows.h>
 
 int EnumerateProcesses();
-int FindProcessByExecutable ( char* executable, HANDLE* hProcess );
+HANDLE FindProcessByExecutable ( char* executable );
 
 int EnumerateModules ( HANDLE hProcess );
-int FindModuleByName ( HANDLE hProcess, char* name, HMODULE* hModule );
+HMODULE FindModuleByName ( HANDLE hProcess, char* name );
 
 int EnumerateExportTable ( HANDLE hProcess, LPCVOID address );
-int FindExportByName ( HANDLE hProcess, LPCVOID address, char* name, DWORD* offset );
+DWORD FindExportByName ( HANDLE hProcess, LPCVOID address, char* name );
 
-int ReadDWORD ( HANDLE hProcess, LPCVOID address, DWORD* value );
+BYTE Read32BYTE ( HANDLE hProcess, DWORD address );
+DWORD Read32DWORD ( HANDLE hProcess, DWORD address );
+char* Read32UTF8String ( HANDLE hProcess, DWORD address );
 
-int ReadMemoryTest ( HANDLE hProcess, LPCVOID address, SIZE_T size );
 int HexDump ( HANDLE hProcess, LPCVOID address, SIZE_T size );
+
+DWORD ReadRootMonoDomain32 ( HANDLE hProcess );
+DWORD MonoDomain32GetAssemblyList ( HANDLE hProcess, DWORD address );
+DWORD MonoDomain32GetFriendlyName ( HANDLE hProcess, DWORD address );
+DWORD MonoAssembly32GetNameInternal ( HANDLE hProcess, DWORD address );
 
 #endif // MEMORY_HANDLING_H

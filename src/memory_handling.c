@@ -29,11 +29,11 @@ int EnumerateProcesses ( ) {
 
     return 0;
 }
-int FindProcessByExecutable ( char* executable, HANDLE* hProcess ) {
+HANDLE FindProcessByExecutable ( char* executable ) {
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if ( snapshot == INVALID_HANDLE_VALUE ) {
         printf("Failed to create snapshot\n");
-        return 1;
+        return NULL;
     }
 
     PROCESSENTRY32 pe;
@@ -41,31 +41,32 @@ int FindProcessByExecutable ( char* executable, HANDLE* hProcess ) {
 
     if ( !Process32First(snapshot, &pe) ) {
         printf("Failed to enumerate first process\n");
-        return 1;
+        return NULL;
     }
 
+    HANDLE hProcess;
     do {
-        HANDLE process = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pe.th32ProcessID);
-        if ( process == NULL )
+        hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pe.th32ProcessID);
+        if ( hProcess == NULL )
             continue;
 
         TCHAR filename[MAX_PATH];
-        if ( !GetModuleFileNameEx(process, NULL, filename, MAX_PATH) ) {
+        if ( !GetModuleFileNameEx(hProcess, NULL, filename, MAX_PATH) ) {
             printf("Failed to get module filename\n");
-            return 1;
+            return NULL;
         }
 
         if ( strcmp(filename, executable) == 0 ) {
-            *hProcess = process;
-            break;
+            CloseHandle(snapshot);
+            return hProcess;
         }
         
-        CloseHandle(process);
+        CloseHandle(hProcess);
     } while( Process32Next(snapshot, &pe) );
 
     CloseHandle(snapshot);
-
-    return hProcess == NULL;
+    
+    return NULL;
 }
 
 int EnumerateModules ( HANDLE hProcess ) {
@@ -104,7 +105,7 @@ int EnumerateModules ( HANDLE hProcess ) {
     }
     return 0;
 }
-int FindModuleByName ( HANDLE hProcess, char* name, HMODULE* hModule ) {
+HMODULE FindModuleByName ( HANDLE hProcess, char* name ) {
     HMODULE hModules[1024];
     DWORD cbNeeded;
     if ( EnumProcessModulesEx(hProcess, hModules, sizeof(hModules), &cbNeeded, LIST_MODULES_ALL) ) {
@@ -116,12 +117,11 @@ int FindModuleByName ( HANDLE hProcess, char* name, HMODULE* hModule ) {
                 continue;
             
             if ( strcmp(lpBaseName, name) == 0 ) {
-                *hModule = hModules[i];
-                return 0;
+                return hModules[i];
             }
         }
     }
-    return 1;
+    return NULL;
 }
 
 int EnumerateExportTable ( HANDLE hProcess, LPCVOID lpBaseAddress ) {
@@ -155,7 +155,7 @@ int EnumerateExportTable ( HANDLE hProcess, LPCVOID lpBaseAddress ) {
 
     return 0;
 }
-int FindExportByName ( HANDLE hProcess, LPCVOID lpBaseAddress, char* name, DWORD* address ) {
+DWORD FindExportByName ( HANDLE hProcess, LPCVOID lpBaseAddress, char* name ) {
     PIMAGE_DOS_HEADER dosHeader = (PIMAGE_DOS_HEADER)malloc(sizeof(IMAGE_DOS_HEADER));
     ReadProcessMemory(hProcess, lpBaseAddress, dosHeader, sizeof(IMAGE_DOS_HEADER), NULL);
     
@@ -172,11 +172,12 @@ int FindExportByName ( HANDLE hProcess, LPCVOID lpBaseAddress, char* name, DWORD
     DWORD* addresses = (DWORD*)malloc(exportDirectory->NumberOfNames * sizeof(DWORD));
     ReadProcessMemory(hProcess, (LPCVOID)(lpBaseAddress + exportDirectory->AddressOfFunctions), addresses, exportDirectory->NumberOfNames * sizeof(DWORD), NULL);
 
+    DWORD address = NULL;
     for ( int i = 0; i < exportDirectory->NumberOfNames; ++i ) {
         char* exportName = (char*)malloc(256);
         ReadProcessMemory(hProcess, (LPCVOID)(lpBaseAddress + names[i]), exportName, 256, NULL);
         if ( strcmp(exportName, name) == 0 ) {
-            *address = addresses[ordinals[i]];
+            address = addresses[ordinals[i]];
             free(exportName);
             break;
         }
@@ -188,38 +189,39 @@ int FindExportByName ( HANDLE hProcess, LPCVOID lpBaseAddress, char* name, DWORD
     free(ntHeader32);
     free(dosHeader);
 
-    return address == NULL;
+    return address;
 }
 
-int ReadDWORD ( HANDLE hProcess, LPCVOID address, DWORD* result ) {
+BYTE Read32BYTE ( HANDLE hProcess, DWORD address ) {
+    BYTE result = 0;
     SIZE_T lpNumberOfBytesRead;
-    if ( !ReadProcessMemory(hProcess, address, result, sizeof(DWORD), &lpNumberOfBytesRead) ) {
+    if ( !ReadProcessMemory(hProcess, (LPCVOID)address, &result, sizeof(BYTE), &lpNumberOfBytesRead) ) {
         printf("Failed to read process memory; %d\n", GetLastError());
-        return 1;
+        return 0;
     }
-    return 0;
+    return result;
 }
-int ReadMemoryTest ( HANDLE hProcess, LPCVOID lpBaseAddress, SIZE_T nSize ) {
-    LPVOID lpBuffer = VirtualAlloc(NULL, nSize, MEM_COMMIT, PAGE_READWRITE);
-    if ( lpBuffer == NULL ) {
-        printf("Failed to allocate buffer\n");
-        return 1;
-    }
-
+DWORD Read32DWORD ( HANDLE hProcess, DWORD address ) {
+    DWORD result = 0;
     SIZE_T lpNumberOfBytesRead;
-    if (!ReadProcessMemory(hProcess, lpBaseAddress, lpBuffer, nSize, &lpNumberOfBytesRead)) {
-        printf("Failed to read process memory\n");
-        return 1;
+    if ( !ReadProcessMemory(hProcess, (LPCVOID)address, &result, sizeof(DWORD), &lpNumberOfBytesRead) ) {
+        printf("Failed to read process memory; %d\n", GetLastError());
+        return 0;
     }
-
-    printf("Read %d bytes from process memory;\n", lpNumberOfBytesRead);
-    printf("Buffer contents: %s\n", (char*)lpBuffer);
-
-    VirtualFree(lpBuffer, 0, MEM_RELEASE);
+    return result;
+}
+char* Read32UTF8String ( HANDLE hProcess, DWORD address ) {
+    char* result = (char*)malloc(256);
+    SIZE_T lpNumberOfBytesRead;
+    if ( !ReadProcessMemory(hProcess, (LPCVOID)address, result, 256, &lpNumberOfBytesRead) ) {
+        printf("Failed to read process memory; %d\n", GetLastError());
+        return;
+    }
+    return result;
 }
 
 int HexDump ( HANDLE hProcess, LPCVOID lpBaseAddress, SIZE_T nSize ) {
-    LPVOID lpBuffer = VirtualAlloc(NULL, nSize, MEM_COMMIT, PAGE_READWRITE);
+    LPVOID lpBuffer = (LPVOID)malloc(nSize);
     if ( lpBuffer == NULL ) {
         printf("Failed to allocate buffer\n");
         return 1;
@@ -253,5 +255,58 @@ int HexDump ( HANDLE hProcess, LPCVOID lpBaseAddress, SIZE_T nSize ) {
         printf("\n");
     }
 
-    VirtualFree(lpBuffer, 0, MEM_RELEASE);
+    free(lpBuffer);
+}
+
+/* Mono */
+DWORD ReadRootMonoDomain32 ( HANDLE hProcess ) {
+    HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
+    DWORD func_address = FindExportByName(hProcess, hModule, "mono_get_root_domain");
+    // mono-2.0-bdwgc.mono_get_root_domain
+    //   A1 ???????? | mov eax, [????????]
+    //   C3          | ret
+    DWORD rootdomainpointerpointer = Read32DWORD(hProcess, (DWORD)hModule + func_address + 1);
+    DWORD rootdomainpointer = Read32DWORD(hProcess, rootdomainpointerpointer);
+
+    return rootdomainpointer;
+}
+DWORD MonoDomain32GetAssemblyList ( HANDLE hProcess, DWORD monodomain ) {
+    HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
+    DWORD func_address = FindExportByName(hProcess, hModule, "mono_domain_assembly_foreach");
+    // mono-2.0-bdwgc.mono_domain_assembly_foreach
+    //   55 8B EC 53 8B 5D 08 8B CB 56 57 | stack management
+    //   E8 ???????? | call ????????
+    //   8B 73 ??    | mov esi, [ebx+??]
+    //   85 F6       | test esi, esi
+    BYTE offset = Read32BYTE(hProcess, (DWORD)hModule + func_address + 0x12);
+    
+    DWORD assemblylistpointer = Read32DWORD(hProcess, monodomain + offset);
+
+    return assemblylistpointer;
+}
+DWORD MonoDomain32GetFriendlyName ( HANDLE hProcess, DWORD monodomain ) {
+    HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
+    DWORD func_address = FindExportByName(hProcess, hModule, "mono_domain_get_friendly_name");
+    // mono-2.0-bdwgc.mono_domain_get_friendly_name
+    //   55 8B EC 8B 45 08 | stack management
+    //   8B 40 ??          | mov eax, [eax+??]
+    //   5D C3             | stack management
+    BYTE offset = Read32BYTE(hProcess, (DWORD)hModule + func_address + 0x8);
+
+    DWORD friendlynamepointer = Read32DWORD(hProcess, monodomain + offset);
+
+    return friendlynamepointer;
+}
+DWORD MonoAssembly32GetNameInternal ( HANDLE hProcess, DWORD monoassembly ) {
+    HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
+    DWORD func_address = FindExportByName(hProcess, hModule, "mono_assembly_get_name_internal");
+    // mono-2.0-bdwgc.mono_assembly_get_name_internal
+    //   55 8B EC 8B 45 08 | stack management
+    //   83 C0 ??          | add eax, ??
+    //   5D C3             | stack management
+    BYTE offset = Read32BYTE(hProcess, (DWORD)hModule + func_address + 0x8);
+
+    DWORD nameinternalpointer = Read32DWORD(hProcess, monoassembly + offset);
+
+    return nameinternalpointer;
 }
