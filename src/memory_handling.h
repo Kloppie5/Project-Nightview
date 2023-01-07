@@ -20,7 +20,14 @@ int HexDump ( HANDLE hProcess, LPCVOID address, SIZE_T size );
 
 DWORD ReadRootMonoDomain32 ( HANDLE hProcess );
 DWORD MonoDomain32GetAssemblyList ( HANDLE hProcess, DWORD address );
+int MonoDomain32EnumerateAssemblies ( HANDLE hProcess, DWORD address );
+DWORD MonoDomain32GetAssemblyByName ( HANDLE hProcess, DWORD address, char* name );
 DWORD MonoDomain32GetFriendlyName ( HANDLE hProcess, DWORD address );
 DWORD MonoAssembly32GetNameInternal ( HANDLE hProcess, DWORD address );
+DWORD MonoAssembly32GetImage ( HANDLE hProcess, DWORD monoassembly );
+DWORD MonoImage32GetName ( HANDLE hProcess, DWORD monoimage );
+DWORD MonoImage32GetClassCache ( HANDLE hProcess, DWORD monoimage );
+int EnumerateMonoInternalHashTable ( HANDLE hProcess, DWORD ghashtable );
+DWORD MonoClass32GetName ( HANDLE hProcess, DWORD monoclass );
 
 #endif // MEMORY_HANDLING_H

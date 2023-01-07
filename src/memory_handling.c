@@ -172,7 +172,7 @@ DWORD FindExportByName ( HANDLE hProcess, LPCVOID lpBaseAddress, char* name ) {
     DWORD* addresses = (DWORD*)malloc(exportDirectory->NumberOfNames * sizeof(DWORD));
     ReadProcessMemory(hProcess, (LPCVOID)(lpBaseAddress + exportDirectory->AddressOfFunctions), addresses, exportDirectory->NumberOfNames * sizeof(DWORD), NULL);
 
-    DWORD address = NULL;
+    DWORD address = 0;
     for ( int i = 0; i < exportDirectory->NumberOfNames; ++i ) {
         char* exportName = (char*)malloc(256);
         ReadProcessMemory(hProcess, (LPCVOID)(lpBaseAddress + names[i]), exportName, 256, NULL);
@@ -215,7 +215,7 @@ char* Read32UTF8String ( HANDLE hProcess, DWORD address ) {
     SIZE_T lpNumberOfBytesRead;
     if ( !ReadProcessMemory(hProcess, (LPCVOID)address, result, 256, &lpNumberOfBytesRead) ) {
         printf("Failed to read process memory; %d\n", GetLastError());
-        return;
+        return NULL;
     }
     return result;
 }
@@ -284,6 +284,33 @@ DWORD MonoDomain32GetAssemblyList ( HANDLE hProcess, DWORD monodomain ) {
 
     return assemblylistpointer;
 }
+int MonoDomain32EnumerateAssemblies ( HANDLE hProcess, DWORD address ) {
+    DWORD assemblylistpointer = MonoDomain32GetAssemblyList(hProcess, address);
+    while ( assemblylistpointer != 0 ) {
+        DWORD assemblypointer = Read32DWORD(hProcess, assemblylistpointer);
+        DWORD assemblynamepointer = MonoAssembly32GetNameInternal(hProcess, assemblypointer);
+        char* assemblyname = Read32UTF8String(hProcess, assemblynamepointer);
+        printf("Assembly [%08X]: %s\n", assemblypointer, assemblyname);
+        free(assemblyname);
+        assemblylistpointer = Read32DWORD(hProcess, assemblylistpointer + 4);
+    }
+    return 0;
+}
+DWORD MonoDomain32GetAssemblyByName ( HANDLE hProcess, DWORD monodomain, char* name ) {
+    DWORD assemblylistpointer = MonoDomain32GetAssemblyList(hProcess, monodomain);
+    while ( assemblylistpointer != 0 ) {
+        DWORD assemblypointer = Read32DWORD(hProcess, assemblylistpointer);
+        DWORD assemblynamepointer = MonoAssembly32GetNameInternal(hProcess, assemblypointer);
+        char* assemblyname = Read32UTF8String(hProcess, assemblynamepointer);
+        if ( strcmp(assemblyname, name) == 0 ) {
+            free(assemblyname);
+            return assemblypointer;
+        }
+        free(assemblyname);
+        assemblylistpointer = Read32DWORD(hProcess, assemblylistpointer + 4);
+    }
+    return 0;
+}
 DWORD MonoDomain32GetFriendlyName ( HANDLE hProcess, DWORD monodomain ) {
     HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
     DWORD func_address = FindExportByName(hProcess, hModule, "mono_domain_get_friendly_name");
@@ -309,4 +336,76 @@ DWORD MonoAssembly32GetNameInternal ( HANDLE hProcess, DWORD monoassembly ) {
     DWORD nameinternalpointer = Read32DWORD(hProcess, monoassembly + offset);
 
     return nameinternalpointer;
+}
+DWORD MonoAssembly32GetImage ( HANDLE hProcess, DWORD monoassembly ) {
+    HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
+    DWORD func_address = FindExportByName(hProcess, hModule, "mono_assembly_get_image");
+    // mono-2.0-bdwgc.mono_assembly_get_image
+    // +86 | 8B 78 ?? | mov edi,[eax+??]
+    BYTE offset = Read32BYTE(hProcess, (DWORD)hModule + func_address + 0x88);
+
+    DWORD imagepointer = Read32DWORD(hProcess, monoassembly + offset);
+
+    return imagepointer;
+}
+DWORD MonoImage32GetName ( HANDLE hProcess, DWORD monoimage ) {
+    HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
+    DWORD func_address = FindExportByName(hProcess, hModule, "mono_image_get_name");
+    // mono-2.0-bdwgc.mono_image_get_name
+    //   55 8B EC 8B 45 08 | stack management
+    //   8B 40 ??          | mov eax, [eax+??]
+    //   5D C3             | stack management
+    BYTE offset = Read32BYTE(hProcess, (DWORD)hModule + func_address + 0x8);
+
+    DWORD namepointer = Read32DWORD(hProcess, monoimage + offset);
+
+    return namepointer;
+}
+DWORD MonoImage32GetClassCache ( HANDLE hProcess, DWORD monoimage ) {
+    HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
+    DWORD func_address = FindExportByName(hProcess, hModule, "mono_image_get_assembly");
+    // mono-2.0-bdwgc.mono_image_get_assembly
+    // +6 | 8B 80 ???????? |  mov eax,[eax+????????]
+    DWORD offset = Read32DWORD(hProcess, (DWORD)hModule + func_address + 0x8);
+
+    DWORD classcache = monoimage + offset + 0x8;
+
+    return classcache;
+}
+int EnumerateMonoInternalHashTable ( HANDLE hProcess, DWORD monointernalhashtable ) {
+    HexDump(hProcess, monointernalhashtable, 0x100);
+
+    // DWORD hash_func = Read32DWORD(hProcess, monointernalhashtable + 0x00); // Identity
+    // DWORD key_extract = Read32DWORD(hProcess, monointernalhashtable + 0x04); // 8B 40 34 | mov eax, [eax+34] { type_token }
+    // DWORD next_value = Read32DWORD(hProcess, monointernalhashtable + 0x08); // 05 A0000000 | add eax, 000000A0 { 160 }
+
+    DWORD size = Read32DWORD(hProcess, monointernalhashtable + 0x0C);
+    DWORD num_entries = Read32DWORD(hProcess, monointernalhashtable + 0x10);
+    DWORD table = Read32DWORD(hProcess, monointernalhashtable + 0x14);
+
+    printf("size: 0x%08X\n", size);
+    printf("num_entries: 0x%08X\n", num_entries);
+    printf("table: 0x%08X\n", table);
+    HexDump(hProcess, table, 0x100);
+
+    for ( int i = 0 ; i < size ; ++i ) {
+        DWORD entry = Read32DWORD(hProcess, table + i * 4);
+        DWORD namepointer = MonoClass32GetName(hProcess, entry);
+        char* name = Read32UTF8String(hProcess, namepointer);
+        printf("Entry [%08X]: %s\n", entry, name);
+        free(name);
+    }
+
+    return 0;
+}
+DWORD MonoClass32GetName ( HANDLE hProcess, DWORD monoclass ) {
+    HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
+    DWORD func_address = FindExportByName(hProcess, hModule, "mono_class_get_name");
+    // mono-2.0-bdwgc.mono_assembly_get_image
+    // +86 | 8B 78 ?? | mov edi, [eax+??]
+    BYTE offset = Read32BYTE(hProcess, (DWORD)hModule + func_address + 0x88);
+
+    DWORD namepointer = Read32DWORD(hProcess, monoclass + offset);
+
+    return namepointer;
 }
