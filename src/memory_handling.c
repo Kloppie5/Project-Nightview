@@ -378,24 +378,44 @@ int EnumerateMonoInternalHashTable ( HANDLE hProcess, DWORD monointernalhashtabl
     // DWORD hash_func = Read32DWORD(hProcess, monointernalhashtable + 0x00); // Identity
     // DWORD key_extract = Read32DWORD(hProcess, monointernalhashtable + 0x04); // 8B 40 34 | mov eax, [eax+34] { type_token }
     // DWORD next_value = Read32DWORD(hProcess, monointernalhashtable + 0x08); // 05 A0000000 | add eax, 000000A0 { 160 }
-
     DWORD size = Read32DWORD(hProcess, monointernalhashtable + 0x0C);
-    DWORD num_entries = Read32DWORD(hProcess, monointernalhashtable + 0x10);
+    // DWORD num_entries = Read32DWORD(hProcess, monointernalhashtable + 0x10);
     DWORD table = Read32DWORD(hProcess, monointernalhashtable + 0x14);
-
-    printf("size: 0x%08X\n", size);
-    printf("num_entries: 0x%08X\n", num_entries);
-    printf("table: 0x%08X\n", table);
-    HexDump(hProcess, table, 0x100);
 
     for ( int i = 0 ; i < size ; ++i ) {
         DWORD entry = Read32DWORD(hProcess, table + i * 4);
         DWORD namepointer = MonoClass32GetName(hProcess, entry);
         char* name = Read32UTF8String(hProcess, namepointer);
-        printf("Entry [%08X]: %s\n", entry, name);
+        DWORD namespacepointer = MonoClass32GetNamespace(hProcess, entry);
+        char* namespace = Read32UTF8String(hProcess, namespacepointer);
+        printf("Entry [%08X]: %s . %s\n", entry, namespace, name);
         free(name);
+        free(namespace);
     }
 
+    return 0;
+}
+DWORD MonoImage32GetClassByName ( HANDLE hProcess, DWORD monoimage, char* namespace, char* name ) {
+    DWORD classcache = MonoImage32GetClassCache(hProcess, monoimage);
+
+    DWORD size = Read32DWORD(hProcess, classcache + 0x0C);
+    DWORD table = Read32DWORD(hProcess, classcache + 0x14);
+
+    for ( int i = 0 ; i < size ; ++i ) {
+        DWORD entry = Read32DWORD(hProcess, table + i * 4);
+        DWORD entrynamepointer = MonoClass32GetName(hProcess, entry);
+        char* entryname = Read32UTF8String(hProcess, entrynamepointer);
+        DWORD entrynamespacepointer = MonoClass32GetNamespace(hProcess, entry);
+        char* entrynamespace = Read32UTF8String(hProcess, entrynamespacepointer);
+        if ( strcmp(entrynamespace, namespace) == 0 && strcmp(entryname, name) == 0 ) {
+            free(entryname);
+            free(entrynamespace);
+            return entry;
+        }
+        free(entryname);
+        free(entrynamespace);
+    }
+    
     return 0;
 }
 DWORD MonoClass32GetName ( HANDLE hProcess, DWORD monoclass ) {
@@ -408,4 +428,78 @@ DWORD MonoClass32GetName ( HANDLE hProcess, DWORD monoclass ) {
     DWORD namepointer = Read32DWORD(hProcess, monoclass + offset);
 
     return namepointer;
+}
+DWORD MonoClass32GetNamespace ( HANDLE hProcess, DWORD monoclass ) {
+    HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
+    DWORD func_address = FindExportByName(hProcess, hModule, "mono_class_get_namespace");
+    // mono-2.0-bdwgc.mono_class_get_namespace
+    // +86 | 8B 78 ?? | mov edi, [eax+??]
+    BYTE offset = Read32BYTE(hProcess, (DWORD)hModule + func_address + 0x88);
+
+    DWORD namespacepointer = Read32DWORD(hProcess, monoclass + offset);
+
+    return namespacepointer;
+}
+DWORD MonoClass32GetRuntimeInfo ( HANDLE hProcess, DWORD monoclass ) {
+    HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
+    DWORD func_address = FindExportByName(hProcess, hModule, "mono_class_vtable");
+    // mono-2.0-bdwgc.mono_class_vtable
+    // +CF | 8B 4A ?? | mov ecx, [edx+??]
+    BYTE offset = Read32BYTE(hProcess, (DWORD)hModule + func_address + 0xD1);
+
+    DWORD runtimeinfopointer = Read32DWORD(hProcess, monoclass + offset);
+
+    return runtimeinfopointer;
+}
+DWORD MonoClass32GetVTable ( HANDLE hProcess, DWORD monoclass ) {
+    DWORD runtimeinfopointer = MonoClass32GetRuntimeInfo(hProcess, monoclass);
+
+    DWORD vtable = Read32DWORD(hProcess, runtimeinfopointer + 0x4);
+
+    return vtable;
+}
+DWORD MonoClass32GetVTableSize ( HANDLE hProcess, DWORD monoclass ) {
+    HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
+    DWORD func_address = FindExportByName(hProcess, hModule, "mono_vtable_get_static_field_data");
+    // mono-2.0-bdwgc.mono_vtable_get_static_field_data
+    // +12 | 8B 41 ?? | mov eax, [ecx+??]
+    BYTE offset = Read32BYTE(hProcess, (DWORD)hModule + func_address + 0x14);
+
+    DWORD vtable_size = Read32DWORD(hProcess, monoclass + offset);
+
+    return vtable_size;
+}
+DWORD MonoClass32GetStaticFieldData ( HANDLE hProcess, DWORD monoclass ) {
+    DWORD vtable = MonoClass32GetVTable(hProcess, monoclass);
+    DWORD vtable_size = MonoClass32GetVTableSize(hProcess, monoclass);
+
+    HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
+    DWORD func_address = FindExportByName(hProcess, hModule, "mono_vtable_get_static_field_data");
+    // mono-2.0-bdwgc.mono_vtable_get_static_field_data
+    // +15 | 8B 44 82 ?? | mov eax, [edx+eax*4+??]
+    BYTE offset = Read32BYTE(hProcess, (DWORD)hModule + func_address + 0x18);
+
+    printf("class: %08X\n", monoclass);
+    printf("vtable: %08X\n", vtable);
+    printf("vtable_size: %08X\n", vtable_size);
+    printf("offset: %08X\n", offset);
+    printf("vtable + vtable_size * 4 + offset: %08X\n", vtable + vtable_size * 4 + offset);
+
+    DWORD staticfielddatapointer = Read32DWORD(hProcess, vtable + vtable_size * 4 + offset);
+
+    return staticfielddatapointer;
+}
+DWORD MonoVTable32GetClass ( HANDLE hProcess, DWORD monovtable ) {
+    // mono-2.0-bdwgc.mono_vtable_class
+    // +6 | 8B 00 | mov eax, [eax]
+    DWORD monoclass = Read32DWORD(hProcess, monovtable);
+
+    return monoclass;
+}
+DWORD MonoVTable32GetDomain ( HANDLE hProcess, DWORD monovtable ) {
+    // mono-2.0-bdwgc.mono_vtable_get_domain
+    // +6 | 8B 40 08 | mov eax, [eax+08]
+    DWORD domain = Read32DWORD(hProcess, monovtable + 0x8);
+
+    return domain;
 }
