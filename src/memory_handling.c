@@ -219,6 +219,16 @@ char* Read32UTF8String ( HANDLE hProcess, DWORD address ) {
     }
     return result;
 }
+char* Read32MonoWideString ( HANDLE hProcess, DWORD address ) {
+    DWORD length = Read32DWORD(hProcess, address + 0x8);
+    SIZE_T lpNumberOfBytesRead;
+    char* result = (char*)malloc(length + 1);
+    for ( int i = 0; i < length; ++i ) {
+        result[i] = Read32BYTE(hProcess, address + 0xC + i*2);
+    }
+    result[length] = 0;
+    return result;
+}
 
 int HexDump ( HANDLE hProcess, LPCVOID lpBaseAddress, SIZE_T nSize ) {
     LPVOID lpBuffer = (LPVOID)malloc(nSize);
