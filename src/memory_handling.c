@@ -258,7 +258,11 @@ int HexDump ( HANDLE hProcess, LPCVOID lpBaseAddress, SIZE_T nSize ) {
     free(lpBuffer);
 }
 
-/* Mono */
+// --------------------
+// Mono
+// --------------------
+
+// Domain
 DWORD ReadRootMonoDomain32 ( HANDLE hProcess ) {
     HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
     DWORD func_address = FindExportByName(hProcess, hModule, "mono_get_root_domain");
@@ -324,6 +328,8 @@ DWORD MonoDomain32GetFriendlyName ( HANDLE hProcess, DWORD monodomain ) {
 
     return friendlynamepointer;
 }
+
+// Assembly
 DWORD MonoAssembly32GetNameInternal ( HANDLE hProcess, DWORD monoassembly ) {
     HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
     DWORD func_address = FindExportByName(hProcess, hModule, "mono_assembly_get_name_internal");
@@ -348,6 +354,8 @@ DWORD MonoAssembly32GetImage ( HANDLE hProcess, DWORD monoassembly ) {
 
     return imagepointer;
 }
+
+// Image
 DWORD MonoImage32GetName ( HANDLE hProcess, DWORD monoimage ) {
     HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
     DWORD func_address = FindExportByName(hProcess, hModule, "mono_image_get_name");
@@ -418,6 +426,8 @@ DWORD MonoImage32GetClassByName ( HANDLE hProcess, DWORD monoimage, char* namesp
     
     return 0;
 }
+
+// Class
 DWORD MonoClass32GetName ( HANDLE hProcess, DWORD monoclass ) {
     HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
     DWORD func_address = FindExportByName(hProcess, hModule, "mono_class_get_name");
@@ -479,16 +489,38 @@ DWORD MonoClass32GetStaticFieldData ( HANDLE hProcess, DWORD monoclass ) {
     // +15 | 8B 44 82 ?? | mov eax, [edx+eax*4+??]
     BYTE offset = Read32BYTE(hProcess, (DWORD)hModule + func_address + 0x18);
 
-    printf("class: %08X\n", monoclass);
-    printf("vtable: %08X\n", vtable);
-    printf("vtable_size: %08X\n", vtable_size);
-    printf("offset: %08X\n", offset);
-    printf("vtable + vtable_size * 4 + offset: %08X\n", vtable + vtable_size * 4 + offset);
-
     DWORD staticfielddatapointer = Read32DWORD(hProcess, vtable + vtable_size * 4 + offset);
 
     return staticfielddatapointer;
 }
+DWORD MonoClass32GetNumFields ( HANDLE hProcess, DWORD monoclass ) {
+    return 100; // TODO
+}
+DWORD MonoClass32GetFields ( HANDLE hProcess, DWORD monoclass ) {
+    // mono-2.0-bdwgc.mono_class_get_field
+    // +61 | 8B 57 60 | mov edx, [edi+60]
+    DWORD fields = Read32DWORD(hProcess, monoclass + 0x60);
+
+    return fields;
+}
+int MonoClass32EnumerateMonoClassFields ( HANDLE hProcess, DWORD monoclass ) {
+    DWORD fields = MonoClass32GetFields(hProcess, monoclass);
+    DWORD numfields = MonoClass32GetNumFields(hProcess, monoclass);
+
+    for ( int i = 0 ; i < numfields ; ++i ) {
+        DWORD fieldtype = Read32DWORD(hProcess, fields + i * 0x10);
+        if ( fieldtype == 0 ) break;
+        DWORD fieldname = Read32DWORD(hProcess, fields + i * 0x10 + 0x4);
+        char* fieldnamestr = Read32UTF8String(hProcess, fieldname);
+        DWORD fieldparent = Read32DWORD(hProcess, fields + i * 0x10 + 0x8);
+        DWORD fieldoffset = Read32DWORD(hProcess, fields + i * 0x10 + 0xC);
+        
+        printf("Field: %s %08X\n", fieldnamestr, fieldoffset);
+        free(fieldnamestr);
+    }
+}
+
+// VTable
 DWORD MonoVTable32GetClass ( HANDLE hProcess, DWORD monovtable ) {
     // mono-2.0-bdwgc.mono_vtable_class
     // +6 | 8B 00 | mov eax, [eax]
