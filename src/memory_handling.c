@@ -46,7 +46,7 @@ HANDLE FindProcessByExecutable ( char* executable ) {
 
     HANDLE hProcess;
     do {
-        hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pe.th32ProcessID);
+        hProcess = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_VM_OPERATION, FALSE, pe.th32ProcessID);
         if ( hProcess == NULL )
             continue;
 
@@ -196,6 +196,15 @@ BYTE Read32BYTE ( HANDLE hProcess, DWORD address ) {
     BYTE result = 0;
     SIZE_T lpNumberOfBytesRead;
     if ( !ReadProcessMemory(hProcess, (LPCVOID)address, &result, sizeof(BYTE), &lpNumberOfBytesRead) ) {
+        printf("Failed to read process memory; %d\n", GetLastError());
+        return 0;
+    }
+    return result;
+}
+WORD Read32WORD ( HANDLE hProcess, DWORD address ) {
+    WORD result = 0;
+    SIZE_T lpNumberOfBytesRead;
+    if ( !ReadProcessMemory(hProcess, (LPCVOID)address, &result, sizeof(WORD), &lpNumberOfBytesRead) ) {
         printf("Failed to read process memory; %d\n", GetLastError());
         return 0;
     }
@@ -528,6 +537,58 @@ int MonoClass32EnumerateMonoClassFields ( HANDLE hProcess, DWORD monoclass ) {
         printf("Field: %s %08X\n", fieldnamestr, fieldoffset);
         free(fieldnamestr);
     }
+}
+DWORD MonoClass32GetNumMethods ( HANDLE hProcess, DWORD monoclass ) {
+    return 150; // TODO
+}
+DWORD MonoClass32GetMethods ( HANDLE hProcess, DWORD monoclass ) {
+    // mono-2.0-bdwgc.mono_class_get_methods
+    // +21 | 8B 5F 64 | mov ebx, [edi+64]
+    DWORD methods = Read32DWORD(hProcess, monoclass + 0x64);
+
+    return methods;
+}
+int MonoClass32EnumerateMonoMethods ( HANDLE hProcess, DWORD monoclass ) {
+    DWORD methods = MonoClass32GetMethods(hProcess, monoclass);
+    DWORD nummethods = MonoClass32GetNumMethods(hProcess, monoclass);
+
+    for ( int i = 0 ; i < nummethods ; ++i ) {
+        DWORD method = Read32DWORD(hProcess, methods + i * 0x4);
+        // WORD flags
+        // WORD iflags
+        // DWORD token
+        // DWORD class
+        // DWORD MonoMethodSignature*
+        DWORD methodname = Read32DWORD(hProcess, method + 0x10);
+        char* methodnamestr = Read32UTF8String(hProcess, methodname);
+        // WORD more info
+        WORD methodslot = Read32WORD(hProcess, method + 0x16);
+        printf("Method[%08X] <%d>: %s\n", method, methodslot, methodnamestr);
+    }
+}
+DWORD MonoClass32GetMonoMethodByName ( HANDLE hProcess, DWORD monoclass, char* name ) {
+    DWORD methods = MonoClass32GetMethods(hProcess, monoclass);
+    DWORD nummethods = MonoClass32GetNumMethods(hProcess, monoclass);
+
+    for ( int i = 0 ; i < nummethods ; ++i ) {
+        DWORD method = Read32DWORD(hProcess, methods + i * 0x4);
+        // WORD flags
+        // WORD iflags
+        // DWORD token
+        // DWORD class
+        // DWORD MonoMethodSignature*
+        DWORD methodname = Read32DWORD(hProcess, method + 0x10);
+        char* methodnamestr = Read32UTF8String(hProcess, methodname);
+        // WORD more info
+        // WORD slot
+
+        if ( strcmp(methodnamestr, name) == 0 ) {
+            free(methodnamestr);
+            return method;
+        }
+        free(methodnamestr);
+    }
+    return -1;
 }
 
 // VTable

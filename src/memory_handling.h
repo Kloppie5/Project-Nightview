@@ -42,6 +42,10 @@ DWORD MonoClass32GetVTableSize ( HANDLE hProcess, DWORD monoclass );
 DWORD MonoClass32GetStaticFieldData ( HANDLE hProcess, DWORD monoclass );
 DWORD MonoClass32GetFields ( HANDLE hProcess, DWORD monoclass );
 int MonoClass32EnumerateMonoClassFields ( HANDLE hProcess, DWORD monoclass );
+DWORD MonoClass32GetNumMethods ( HANDLE hProcess, DWORD monoclass );
+DWORD MonoClass32GetMethods ( HANDLE hProcess, DWORD monoclass );
+int MonoClass32EnumerateMonoMethods ( HANDLE hProcess, DWORD monoclass );
+DWORD MonoClass32GetMonoMethodByName ( HANDLE hProcess, DWORD monoclass, char* name );
 
 DWORD MonoVTable32GetClass ( HANDLE hProcess, DWORD monovtable );
 DWORD MonoVTable32GetDomain ( HANDLE hProcess, DWORD monovtable );
