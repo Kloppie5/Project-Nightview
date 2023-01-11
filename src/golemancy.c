@@ -1,3 +1,4 @@
+#include <stdarg.h>
 #include <stdio.h>
 #include <windows.h>
 
@@ -17,14 +18,18 @@ int Something ( ) {
 
     DWORD worktoken = GetFirstTokenByAbsolutePathPrefix(hProcess, hornedaxe, "~/tabletop!work_");
     DWORD worksituation = TokenGetPayload(hProcess, worktoken);
+    DWORD workwindow = TokenGetManifestation(hProcess, worktoken);
 
-    DWORD jobtoken = GetFirstTokenByAbsolutePathPrefix(hProcess, hornedaxe, "~/tabletop!legacyphysicianjob_");
+    DWORD jobtoken = GetFirstTokenByAbsolutePathPrefix(hProcess, hornedaxe, "~/tabletop!institutephysicianjob_");
     
-    printf("Work situation: %08X\n", worksituation);
+    printf("Work token: %08X\n", worktoken);
     printf("Job token: %08X\n", jobtoken);
 
-    //SituationOpen(hProcess, worksituation);
-    //SituationInteractWithIncomingToken(hProcess, worksituation, jobtoken);
+    //MonoInvokeVoid(hProcess, worksituation, "Open", 0); // Works
+    //MonoInvokeVoid(hProcess, worksituation, "TryStart", 0); // Crashes
+    //MonoInvokeVoid(hProcess, worksituation, "Conclude", 0); // Initially works but then crashes
+    //MonoInvokeVoid(hProcess, worksituation, "Close", 0); // Works
+
 }
 
 /*
@@ -86,6 +91,11 @@ DWORD WatchmanGet ( HANDLE hProcess, DWORD watchman, char* classname ) {
 
     return 0;
 }
+/*
+Token has a manifestation;
+CardManifestation
+VerbManifestation
+*/
 DWORD GetFirstTokenByAbsolutePathPrefix ( HANDLE hProcess, DWORD hornedaxe, char* absolutepathprefix ) {
     DWORD _registeredSpheres = Read32DWORD(hProcess, hornedaxe + 0x1C);
     DWORD _registeredSpheresArray = Read32DWORD(hProcess, _registeredSpheres + 0xC);
@@ -115,84 +125,25 @@ DWORD GetFirstTokenByAbsolutePathPrefix ( HANDLE hProcess, DWORD hornedaxe, char
     }
     return 0;
 }
+DWORD TokenGetManifestation ( HANDLE hProcess, DWORD token ) {
+    return Read32DWORD(hProcess, token + 0x1C);
+}
 DWORD TokenGetPayload ( HANDLE hProcess, DWORD token ) {
     return Read32DWORD(hProcess, token + 0x28);
 }
+void MonoInvokeVoid ( HANDLE hProcess, DWORD instance, char* methodname, int argnum, ... ) {
+    va_list varargs;
+    va_start(varargs, argnum);
 
-void SituationOpen ( HANDLE hProcess, DWORD situation ) {
-    printf("Opening situation %08X\n", situation);
-    DWORD situationvtable = Read32DWORD(hProcess, situation);
-    DWORD situationclass = Read32DWORD(hProcess, situationvtable);
-
-    DWORD rootdomain = ReadRootMonoDomain32(hProcess);
-    HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
-    DWORD mono_thread_attach = (DWORD)hModule + FindExportByName(hProcess, hModule, "mono_thread_attach");
-    DWORD mono_runtime_invoke = (DWORD)hModule + FindExportByName(hProcess, hModule, "mono_runtime_invoke");
-    DWORD Open = MonoClass32GetMonoMethodByName(hProcess, situationclass, "Open");
-
-    DWORD code = VirtualAllocEx(hProcess, NULL, 0x1000, MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
-    LPCVOID codeBuffer = (LPCVOID)malloc(0x1000);    
-    
-    // Attach mono thread
-    //   68 rootdomain | PUSH rootdomain
-    *(BYTE* )(codeBuffer +  0) = 0x68;
-    *(DWORD*)(codeBuffer +  1) = rootdomain;
-    //   B8 mono_thread_attach | MOV EAX, mono_thread_attach
-    *(BYTE* )(codeBuffer +  5) = 0xB8;
-    *(DWORD*)(codeBuffer +  6) = mono_thread_attach;
-    //   FF D0 | CALL EAX
-    *(WORD* )(codeBuffer + 10) = 0xD0FF;
-    //   83 C4 04 | ADD ESP, 4
-    *(WORD* )(codeBuffer + 12) = 0xC483;
-    *(BYTE* )(codeBuffer + 14) = 0x04;
-
-    // mono_runtime_invoke
-    //   B8 mono_runtime_invoke | MOV EAX, mono_runtime_invoke
-    *(BYTE* )(codeBuffer + 15) = 0xB8;
-    *(DWORD*)(codeBuffer + 16) = mono_runtime_invoke;
-    //   68 00000000 | PUSH exception handler
-    *(BYTE* )(codeBuffer + 20) = 0x68;
-    *(DWORD*)(codeBuffer + 21) = 0;
-    //   68 00000000 | PUSH args
-    *(BYTE* )(codeBuffer + 25) = 0x68;
-    *(DWORD*)(codeBuffer + 26) = 0;
-    //   68 situation | PUSH situation
-    *(BYTE* )(codeBuffer + 30) = 0x68;
-    *(DWORD*)(codeBuffer + 31) = situation;
-    //   68 method | PUSH method
-    *(BYTE* )(codeBuffer + 35) = 0x68;
-    *(DWORD*)(codeBuffer + 36) = Open;
-    //   FF D0 | CALL EAX
-    *(WORD* )(codeBuffer + 40) = 0xD0FF;
-    //   83 C4 10 | ADD ESP, 16
-    *(WORD* )(codeBuffer + 42) = 0xC483;
-    *(BYTE* )(codeBuffer + 44) = 0x10;
-
-    // C3 | RET
-    *(BYTE* )(codeBuffer + 45) = 0xC3;
-
-    if ( !WriteProcessMemory(hProcess, code, codeBuffer, 0x1000, NULL) ) {
-        printf("WriteProcessMemory failed: %08X\n", GetLastError());
-        return;
-    }
-
-    HANDLE hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)code, NULL, 0, NULL);
-    WaitForSingleObject(hThread, INFINITE);
-    CloseHandle(hThread);
-
-    free((void*)codeBuffer);
-    VirtualFreeEx(hProcess, code, 0, MEM_RELEASE);
-}
-void SituationInteractWithIncomingToken ( HANDLE hProcess, DWORD situation, DWORD token ) {
-    printf("Forcing situation %08X to interact with token %08X\n", situation, token);
-    DWORD situationvtable = Read32DWORD(hProcess, situation);
-    DWORD situationclass = Read32DWORD(hProcess, situationvtable);
+    printf("Invoking %s/%d on %08X\n", methodname, argnum, instance);
+    DWORD instancevtable = Read32DWORD(hProcess, instance);
+    DWORD instanceclass = Read32DWORD(hProcess, instancevtable);
 
     DWORD rootdomain = ReadRootMonoDomain32(hProcess);
     HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
     DWORD mono_thread_attach = (DWORD)hModule + FindExportByName(hProcess, hModule, "mono_thread_attach");
     DWORD mono_runtime_invoke = (DWORD)hModule + FindExportByName(hProcess, hModule, "mono_runtime_invoke");
-    DWORD InteractWithIncoming = MonoClass32GetMonoMethodByName(hProcess, situationclass, "InteractWithIncoming");
+    DWORD method = MonoClass32GetMonoMethodByName(hProcess, instanceclass, methodname);
 
     DWORD args = VirtualAllocEx(hProcess, NULL, 0x1000, MEM_COMMIT, PAGE_READWRITE);
     LPCVOID argsBuffer = (LPCVOID)malloc(0x1000);
@@ -213,7 +164,11 @@ void SituationInteractWithIncomingToken ( HANDLE hProcess, DWORD situation, DWOR
     *(BYTE* )(codeBuffer + 14) = 0x04;
 
     // arguments
-    *(DWORD*)(argsBuffer + 0) = token; // arg0
+    for ( int i = 0 ; i < argnum ; ++i ) {
+        DWORD arg = (DWORD)va_arg(varargs, DWORD);
+        *(DWORD*)(argsBuffer + i * 4) = arg;
+    }
+    va_end(varargs);
 
     // mono_runtime_invoke
     //   B8 mono_runtime_invoke | MOV EAX, mono_runtime_invoke
@@ -227,10 +182,10 @@ void SituationInteractWithIncomingToken ( HANDLE hProcess, DWORD situation, DWOR
     *(DWORD*)(codeBuffer + 26) = args;
     //   68 situation | PUSH situation
     *(BYTE* )(codeBuffer + 30) = 0x68;
-    *(DWORD*)(codeBuffer + 31) = situation;
+    *(DWORD*)(codeBuffer + 31) = instance;
     //   68 method | PUSH method
     *(BYTE* )(codeBuffer + 35) = 0x68;
-    *(DWORD*)(codeBuffer + 36) = InteractWithIncoming;
+    *(DWORD*)(codeBuffer + 36) = method;
     //   FF D0 | CALL EAX
     *(WORD* )(codeBuffer + 40) = 0xD0FF;
     //   83 C4 10 | ADD ESP, 16
@@ -241,6 +196,7 @@ void SituationInteractWithIncomingToken ( HANDLE hProcess, DWORD situation, DWOR
     *(BYTE* )(codeBuffer + 45) = 0xC3;
 
     WriteProcessMemory(hProcess, args, argsBuffer, 0x1000, NULL);
+    HexDump(hProcess, args, 0x100);
     WriteProcessMemory(hProcess, code, codeBuffer, 0x1000, NULL);
     HANDLE hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)code, NULL, 0, NULL);
     WaitForSingleObject(hThread, INFINITE);

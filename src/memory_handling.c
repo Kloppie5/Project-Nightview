@@ -409,6 +409,9 @@ int EnumerateMonoInternalHashTable ( HANDLE hProcess, DWORD monointernalhashtabl
     // DWORD num_entries = Read32DWORD(hProcess, monointernalhashtable + 0x10);
     DWORD table = Read32DWORD(hProcess, monointernalhashtable + 0x14);
 
+    printf("size: %08X\n", size);
+    printf("table: %08X\n", table);
+    
     for ( int i = 0 ; i < size ; ++i ) {
         DWORD entry = Read32DWORD(hProcess, table + i * 4);
         DWORD namepointer = MonoClass32GetName(hProcess, entry);
