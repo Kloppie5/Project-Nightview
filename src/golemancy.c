@@ -3,99 +3,124 @@
 #include <windows.h>
 
 #include "golemancy.h"
+#include "process_handling.h"
+#include "mono_handling.h"
 #include "memory_handling.h"
 
 int Something ( ) {
     HANDLE hProcess = FindProcessByExecutable("C:\\Program Files (x86)\\Steam\\steamapps\\common\\Cultist Simulator\\cultistsimulator.exe");
-    DWORD rootdomainpointer = ReadRootMonoDomain32(hProcess);
-    DWORD assembly = MonoDomain32GetAssemblyByName(hProcess, rootdomainpointer, "SecretHistories.Main");
-    DWORD assemblyimage = MonoAssembly32GetImage(hProcess, assembly);
-
-    DWORD watchman = MonoImage32GetClassByName(hProcess, assemblyimage, "SecretHistories.UI", "Watchman");
     
+    DWORD watchman = GetWatchmanClass(hProcess);
     DWORD hornedaxe = WatchmanGet(hProcess, watchman, "HornedAxe");
-    DumpHornedAxe(hProcess, hornedaxe);
 
-    DWORD worktoken = GetFirstTokenByAbsolutePathPrefix(hProcess, hornedaxe, "~/tabletop!work_");
-    DWORD worksituation = TokenGetPayload(hProcess, worktoken);
-    DWORD workwindow = TokenGetManifestation(hProcess, worktoken);
+    DWORD tabletop = HornedAxeGetSphereById(hProcess, hornedaxe, "~/tabletop");
+    /*
+    ~/tabletop!ascensionenlightenmentc
+    ~/tabletop!cultlantern_1
 
-    DWORD jobtoken = GetFirstTokenByAbsolutePathPrefix(hProcess, hornedaxe, "~/tabletop!institutephysicianjob_");
+    ~/tabletop!dream
+    ~/tabletop!study
+    ~/tabletop!talk
+    ~/tabletop!work
+    ~/tabletop!explore
+   
+    ~/tabletop!time
+    ~/tabletop!suspicion
+
+    ~/tabletop!health
+    ~/tabletop!skillhealtha
+    ~/tabletop!passion
+    ~/tabletop!skillpassiona
+    ~/tabletop!reason
+    ~/tabletop!skillreasona
+    ~/tabletop!erudition
+    ~/tabletop!funds
+
+    ~/tabletop!fragmentsecrethistories
+    ~/tabletop!fragmentsecrethistoriesb
+    ~/tabletop!fragmentsecrethistoriesc
+    ~/tabletop!fragmentsecrethistoriesd
+    ~/tabletop!fragmentlantern
+    ~/tabletop!fragmentlanternd
+    ~/tabletop!fragmentmoth
+    ~/tabletop!fragmentmothb
+    ~/tabletop!fragmentgrail
+    ~/tabletop!fragmentgrailb
+    ~/tabletop!fragmentwinter
+    ~/tabletop!fragmentwinterb
+    ~/tabletop!fragmentedge
+    ~/tabletop!fragmentedgeb
+    ~/tabletop!fragmentknock
+    ~/tabletop!fragmentknockb
+    ~/tabletop!fragmentheart
+    ~/tabletop!fragmentheartc
+    ~/tabletop!fragmentforge
+    ~/tabletop!fragmentforgeb
+
+    ~/tabletop!textbookpassion
+    ~/tabletop!textbookreason
+
+    ~/tabletop!locationcabaret
+    ~/tabletop!locationbookdealer
+    ~/tabletop!locationauctionhouse
     
-    printf("Work token: %08X\n", worktoken);
-    printf("Job token: %08X\n", jobtoken);
+    ~/tabletop!gloverandgloverjuniorjob
+    
+    ~/tabletop!generic_a_heart
+    ~/tabletop!generic_a_grail
+    ~/tabletop!generic_a_lantern
+    ~/tabletop!clovette_a
+    ~/tabletop!dorothy_a
+    ~/tabletop!enid_a
+    ~/tabletop!sylvia_a
+    ~/tabletop!rose_a
+    ~/tabletop!renira_a
+    ~/tabletop!saliba_a
+    ~/tabletop!clifton_a
 
+    ~/tabletop!waywood
+    ~/tabletop!waywhite
+    ~/tabletop!waystag_after
+    ~/tabletop!wayspider
+    ~/tabletop!waypeacock
+    
+    ~/tabletop!ritetoolfollowerconsumelore
+    ~/tabletop!ritetoolconsumefollower
+
+    ~/tabletop!dropzone_situation
+    ~/tabletop!dropzone_elementstack
+    
+    ~/tabletop!vaultcapital2
+    ~/tabletop!vaultcapital3
+    ~/tabletop!vaultcapital4
+    ~/tabletop!vaultlandbeyondforest2
+    ~/tabletop!vaultlandbeyondforest3
+    ~/tabletop!vaultlandbeyondforest4
+    ~/tabletop!vaultshires1
+    ~/tabletop!vaultshires2
+    ~/tabletop!vaultshires3
+    
+    ~/tabletop!scholarlatin
+    ~/tabletop!scholargreek
+    ~/tabletop!scholarsanskrit
+    ~/tabletop!scholarfucine
+    */
+    printf("Tabletop: %08X\n", tabletop);
+    int health = SphereGetTokenCountById(hProcess, tabletop, "~/tabletop!health");
+    DWORD health_1 = SphereGetTokenById(hProcess, tabletop, "~/tabletop!health", 0);
+
+    printf("Health: %d\n", health);
+    
+    //MonoInvokeVoid(hProcess, heart, "Beat", 2, (DWORD)10.0f, (DWORD)10.0f);
     //MonoInvokeVoid(hProcess, worksituation, "Open", 0); // Works
     //MonoInvokeVoid(hProcess, worksituation, "TryStart", 0); // Crashes
     //MonoInvokeVoid(hProcess, worksituation, "Conclude", 0); // Initially works but then crashes
     //MonoInvokeVoid(hProcess, worksituation, "Close", 0); // Works
-
 }
 
-/*
-    Watchman is a static class responsible for keeping track of a set of registered objects.
-    The first and only static field is a dictionary of type Dictionary<Type, object>.
-*/
-int EnumerateWatchmanRegistered ( HANDLE hProcess, DWORD watchman ) {
-    DWORD watchmanstatic = MonoClass32GetStaticFieldData(hProcess, watchman);
-
-    DWORD registered = Read32DWORD(hProcess, watchmanstatic);
-
-    DWORD entries = Read32DWORD(hProcess, registered + 0xC);
-    DWORD count = Read32DWORD(hProcess, entries + 0xC);
-
-    for ( int i = 0 ; i < count ; ++i ) {
-        // DWORD hashcode = Read32DWORD(hProcess, entries + 0x10 + i * 0x10);
-        // DWORD next = Read32DWORD(hProcess, entries + 0x14 + i * 0x10);
-        DWORD key = Read32DWORD(hProcess, entries + 0x18 + i * 0x10);
-        DWORD value = Read32DWORD(hProcess, entries + 0x1C + i * 0x10);
-        if ( key == 0 ) continue;
-        DWORD keytype = Read32DWORD(hProcess, key + 0x8);
-        DWORD keyclass = Read32DWORD(hProcess, keytype);
-        DWORD keyclassname = Read32DWORD(hProcess, keyclass + 0x2C);
-        char* keyclassnamestr = Read32UTF8String(hProcess, keyclassname);
-
-        printf("Entry [%s]: %08X\n", keyclassnamestr, value);
-
-        free(keyclassnamestr);
-    }
-
-    return 0;
-}
 // static FucineRoot Get()
 //  List<Sphere> _spheres
-DWORD WatchmanGet ( HANDLE hProcess, DWORD watchman, char* classname ) {
-    DWORD watchmanstatic = MonoClass32GetStaticFieldData(hProcess, watchman);
 
-    DWORD registered = Read32DWORD(hProcess, watchmanstatic);
-
-    DWORD entries = Read32DWORD(hProcess, registered + 0xC);
-    DWORD count = Read32DWORD(hProcess, entries + 0xC);
-
-    for ( int i = 0 ; i < count ; ++i ) {
-        DWORD key = Read32DWORD(hProcess, entries + 0x18 + i * 0x10);
-        DWORD value = Read32DWORD(hProcess, entries + 0x1C + i * 0x10);
-        if ( key == 0 ) continue;
-        DWORD keytype = Read32DWORD(hProcess, key + 0x8);
-        DWORD keyclass = Read32DWORD(hProcess, keytype);
-        DWORD keyclassname = Read32DWORD(hProcess, keyclass + 0x2C);
-        char* keyclassnamestr = Read32UTF8String(hProcess, keyclassname);
-
-        if ( strcmp(keyclassnamestr, classname) == 0 ) {
-            free(keyclassnamestr);
-            return value;
-        }
-
-        free(keyclassnamestr);
-    }
-
-    return 0;
-}
-/*
-Token has a manifestation;
-CardManifestation
-VerbManifestation
-*/
 DWORD GetFirstTokenByAbsolutePathPrefix ( HANDLE hProcess, DWORD hornedaxe, char* absolutepathprefix ) {
     DWORD _registeredSpheres = Read32DWORD(hProcess, hornedaxe + 0x1C);
     DWORD _registeredSpheresArray = Read32DWORD(hProcess, _registeredSpheres + 0xC);
@@ -125,89 +150,8 @@ DWORD GetFirstTokenByAbsolutePathPrefix ( HANDLE hProcess, DWORD hornedaxe, char
     }
     return 0;
 }
-DWORD TokenGetManifestation ( HANDLE hProcess, DWORD token ) {
-    return Read32DWORD(hProcess, token + 0x1C);
-}
-DWORD TokenGetPayload ( HANDLE hProcess, DWORD token ) {
-    return Read32DWORD(hProcess, token + 0x28);
-}
-void MonoInvokeVoid ( HANDLE hProcess, DWORD instance, char* methodname, int argnum, ... ) {
-    va_list varargs;
-    va_start(varargs, argnum);
 
-    printf("Invoking %s/%d on %08X\n", methodname, argnum, instance);
-    DWORD instancevtable = Read32DWORD(hProcess, instance);
-    DWORD instanceclass = Read32DWORD(hProcess, instancevtable);
-
-    DWORD rootdomain = ReadRootMonoDomain32(hProcess);
-    HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
-    DWORD mono_thread_attach = (DWORD)hModule + FindExportByName(hProcess, hModule, "mono_thread_attach");
-    DWORD mono_runtime_invoke = (DWORD)hModule + FindExportByName(hProcess, hModule, "mono_runtime_invoke");
-    DWORD method = MonoClass32GetMonoMethodByName(hProcess, instanceclass, methodname);
-
-    DWORD args = VirtualAllocEx(hProcess, NULL, 0x1000, MEM_COMMIT, PAGE_READWRITE);
-    LPCVOID argsBuffer = (LPCVOID)malloc(0x1000);
-    DWORD code = VirtualAllocEx(hProcess, NULL, 0x1000, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-    LPCVOID codeBuffer = (LPCVOID)malloc(0x1000);    
-    
-    // Attach mono thread
-    //   68 rootdomain | PUSH rootdomain
-    *(BYTE* )(codeBuffer +  0) = 0x68;
-    *(DWORD*)(codeBuffer +  1) = rootdomain;
-    //   B8 mono_thread_attach | MOV EAX, mono_thread_attach
-    *(BYTE* )(codeBuffer +  5) = 0xB8;
-    *(DWORD*)(codeBuffer +  6) = mono_thread_attach;
-    //   FF D0 | CALL EAX
-    *(WORD* )(codeBuffer + 10) = 0xD0FF;
-    //   83 C4 04 | ADD ESP, 4
-    *(WORD* )(codeBuffer + 12) = 0xC483;
-    *(BYTE* )(codeBuffer + 14) = 0x04;
-
-    // arguments
-    for ( int i = 0 ; i < argnum ; ++i ) {
-        DWORD arg = (DWORD)va_arg(varargs, DWORD);
-        *(DWORD*)(argsBuffer + i * 4) = arg;
-    }
-    va_end(varargs);
-
-    // mono_runtime_invoke
-    //   B8 mono_runtime_invoke | MOV EAX, mono_runtime_invoke
-    *(BYTE* )(codeBuffer + 15) = 0xB8;
-    *(DWORD*)(codeBuffer + 16) = mono_runtime_invoke;
-    //   68 00000000 | PUSH exception handler
-    *(BYTE* )(codeBuffer + 20) = 0x68;
-    *(DWORD*)(codeBuffer + 21) = 0;
-    //   68 args | PUSH args
-    *(BYTE* )(codeBuffer + 25) = 0x68;
-    *(DWORD*)(codeBuffer + 26) = args;
-    //   68 situation | PUSH situation
-    *(BYTE* )(codeBuffer + 30) = 0x68;
-    *(DWORD*)(codeBuffer + 31) = instance;
-    //   68 method | PUSH method
-    *(BYTE* )(codeBuffer + 35) = 0x68;
-    *(DWORD*)(codeBuffer + 36) = method;
-    //   FF D0 | CALL EAX
-    *(WORD* )(codeBuffer + 40) = 0xD0FF;
-    //   83 C4 10 | ADD ESP, 16
-    *(WORD* )(codeBuffer + 42) = 0xC483;
-    *(BYTE* )(codeBuffer + 44) = 0x10;
-
-    // C3 | RET
-    *(BYTE* )(codeBuffer + 45) = 0xC3;
-
-    WriteProcessMemory(hProcess, args, argsBuffer, 0x1000, NULL);
-    HexDump(hProcess, args, 0x100);
-    WriteProcessMemory(hProcess, code, codeBuffer, 0x1000, NULL);
-    HANDLE hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)code, NULL, 0, NULL);
-    WaitForSingleObject(hThread, INFINITE);
-    CloseHandle(hThread);
-
-    free((void*)argsBuffer);
-    free((void*)codeBuffer);
-    VirtualFreeEx(hProcess, args, 0, MEM_RELEASE);
-    VirtualFreeEx(hProcess, code, 0, MEM_RELEASE);
-}
-
+/*
 int DumpHornedAxe ( HANDLE hProcess, DWORD hornedaxe ) {
     printf("HornedAxe: %08X\n", hornedaxe);
     
@@ -232,22 +176,7 @@ int DumpHornedAxe ( HANDLE hProcess, DWORD hornedaxe ) {
 
     printf("  _registeredSpheres: %08X\n", _registeredSpheres);
     // HashSet<Sphere>
-    /*
-    public HashSet<Int32> ReadHashSetObject ( Int32 pointer ) {
-      HashSet<Int32> set = new HashSet<Int32>();
-      Int32 slotArray = MemoryHelper.ReadAbsolute<Int32>(_manager, pointer + 0xC);
-      Int32 entries = MemoryHelper.ReadAbsolute<Int32>(_manager, slotArray + 0xC);
-      for ( Int32 i = 0 ; i < entries ; ++i ) {
-        Int32 hashcode = MemoryHelper.ReadAbsolute<Int32>(_manager, slotArray + 0x10 + i * 0xC);
-        Int32 next = MemoryHelper.ReadAbsolute<Int32>(_manager, slotArray + 0x14 + i * 0xC);
-        Int32 value = MemoryHelper.ReadAbsolute<Int32>(_manager, slotArray + 0x18 + i * 0xC);
-        if ( value == 0 )
-          continue;
-        set.Add(value);
-      }
-      return set;
-    }
-    */
+    
     DWORD _registeredSpheresArray = Read32DWORD(hProcess, _registeredSpheres + 0xC);
     DWORD _registeredSpheresCount = Read32DWORD(hProcess, _registeredSpheresArray + 0xC);
     for ( int i = 0 ; i < _registeredSpheresCount ; ++i ) {
@@ -292,6 +221,20 @@ int DumpHornedAxe ( HANDLE hProcess, DWORD hornedaxe ) {
 
         free(_editorAbsolutePathstr);
     }
+}
+int DumpHeart( HANDLE hProcess, DWORD heart ) {
+    DWORD vtable = Read32DWORD(hProcess, heart);
+    DWORD monoclass = Read32DWORD(hProcess, vtable);
+
+    DWORD gameSpeedState = Read32DWORD(hProcess, heart + 0x10);
+    DWORD timerBetweenBeats = Read32DWORD(hProcess, heart + 0x2C);
+
+    float timerBetweenBeatsf = (float)timerBetweenBeats;
+
+    printf("Heart: %08X\n", heart);
+    printf("  gameSpeedState: %08X\n", gameSpeedState);
+    printf("  timerBetweenBeats: %08X\n", timerBetweenBeats);
+    printf("  timerBetweenBeatsf: %f\n", timerBetweenBeatsf);
 }
 int DumpStageHand ( HANDLE hProcess, DWORD stagehand ) {
     printf("StageHand: %08X\n", stagehand);
@@ -375,6 +318,7 @@ int DumpElementStack ( HANDLE hProcess, DWORD elementstack ) {
     printf("    ElementStack[%08X]: %dx %s\n", elementstack, elementstackquantity, elementstackidstr);
     free(elementstackidstr);
 }
+*/
 
 // Note to self; dont arrest EVERYONE
 
