@@ -197,7 +197,7 @@ BYTE Read32BYTE ( HANDLE hProcess, DWORD address ) {
     SIZE_T lpNumberOfBytesRead;
     if ( !ReadProcessMemory(hProcess, (LPCVOID)address, &result, sizeof(BYTE), &lpNumberOfBytesRead) ) {
         printf("Failed to read process memory; %d\n", GetLastError());
-        return 0;
+        exit(1);
     }
     return result;
 }
@@ -206,7 +206,7 @@ WORD Read32WORD ( HANDLE hProcess, DWORD address ) {
     SIZE_T lpNumberOfBytesRead;
     if ( !ReadProcessMemory(hProcess, (LPCVOID)address, &result, sizeof(WORD), &lpNumberOfBytesRead) ) {
         printf("Failed to read process memory; %d\n", GetLastError());
-        return 0;
+        exit(1);
     }
     return result;
 }
@@ -215,9 +215,17 @@ DWORD Read32DWORD ( HANDLE hProcess, DWORD address ) {
     SIZE_T lpNumberOfBytesRead;
     if ( !ReadProcessMemory(hProcess, (LPCVOID)address, &result, sizeof(DWORD), &lpNumberOfBytesRead) ) {
         printf("Failed to read process memory; %d\n", GetLastError());
-        return 0;
+        exit(1);
     }
     return result;
+}
+int Write32DWORD ( HANDLE hProcess, DWORD address, DWORD value ) {
+    SIZE_T lpNumberOfBytesWritten;
+    if ( !WriteProcessMemory(hProcess, (LPVOID)address, &value, sizeof(DWORD), &lpNumberOfBytesWritten) ) {
+        printf("Failed to write process memory; %d\n", GetLastError());
+        exit(1);
+    }
+    return 1;
 }
 char* Read32UTF8String ( HANDLE hProcess, DWORD address ) {
     char* result = (char*)malloc(256);

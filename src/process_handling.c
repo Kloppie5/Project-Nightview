@@ -155,7 +155,7 @@ DWORD HornedAxeGetSphereById ( HANDLE hProcess, DWORD hornedaxe, char* id ) {
         DWORD sphere = Read32DWORD(hProcess, _array + 0x10 + i * 0xC + 0x8);
         if ( sphere == 0 ) continue;
 
-        DWORD _editorAbsolutePath = Read32DWORD(hProcess, sphere + 0x18);
+        DWORD _editorAbsolutePath = Read32DWORD(hProcess, sphere + 0x1C);
         char* _editorAbsolutePathstr = Read32MonoWideString(hProcess, _editorAbsolutePath);
 
         // DWORD spherespec = Read32DWORD(hProcess, sphere + 0xC);
@@ -171,9 +171,89 @@ DWORD HornedAxeGetSphereById ( HANDLE hProcess, DWORD hornedaxe, char* id ) {
     }
     return 0;
 }
+void EnumerateHornedAxeSpheres ( HANDLE hProcess, DWORD hornedaxe ) {
+    DWORD _spheres = HornedAxeGetSphereHashSet(hProcess, hornedaxe);
+    DWORD _array = Read32DWORD(hProcess, _spheres + 0xC);
+    DWORD _count = Read32DWORD(hProcess, _array + 0xC);
+    for ( int i = 0 ; i < _count ; ++i ) {
+        DWORD sphere = Read32DWORD(hProcess, _array + 0x10 + i * 0xC + 0x8);
+        if ( sphere == 0 ) continue;
 
+        char* _editorAbsolutePathstr = SphereGetEditorAbsolutePath(hProcess, sphere);
+        printf("%s | ", _editorAbsolutePathstr);
+        free(_editorAbsolutePathstr);
+
+        char* _editorWildPathstr = SphereGetEditorWildPath(hProcess, sphere);
+        printf("%s\n", _editorWildPathstr);
+        free(_editorWildPathstr);
+    }
+}
+
+char* DominionGetIdentifier ( HANDLE hProcess, DWORD dominion ) {
+    DWORD identifier = Read32DWORD(hProcess, dominion + 0x10);
+    return Read32MonoWideString(hProcess, identifier);
+}
+DWORD DominionGetSphereList ( HANDLE hProcess, DWORD dominion ) {
+    return Read32DWORD(hProcess, dominion + 0x14);
+}
+char* SituationDominionGetEditableIdentifier ( HANDLE hProcess, DWORD situationdominion ) {
+    DWORD editableidentifier = Read32DWORD(hProcess, situationdominion + 0x34);
+    char* editableidentifierstr = Read32MonoWideString(hProcess, editableidentifier);
+    return editableidentifierstr;
+}
+
+DWORD SphereGetContainer ( HANDLE hProcess, DWORD sphere ) {
+    return Read32DWORD(hProcess, sphere + 0x18);
+}
+char* SphereGetEditorAbsolutePath ( HANDLE hProcess, DWORD sphere ) {
+    DWORD _editorAbsolutePath = Read32DWORD(hProcess, sphere + 0x1C);
+    char* _editorAbsolutePathstr = Read32MonoWideString(hProcess, _editorAbsolutePath);
+    return _editorAbsolutePathstr;
+}
+char* SphereGetEditorWildPath ( HANDLE hProcess, DWORD sphere ) {
+    DWORD _editorWildPath = Read32DWORD(hProcess, sphere + 0x20);
+    char* _editorWildPathstr = Read32MonoWideString(hProcess, _editorWildPath);
+    return _editorWildPathstr;
+}
 DWORD SphereGetTokenList ( HANDLE hProcess, DWORD sphere ) {
-    return Read32DWORD(hProcess, sphere + 0x28);
+    return Read32DWORD(hProcess, sphere + 0x2C);
+}
+void SphereListPrintTokens ( HANDLE hProcess, DWORD spherelist ) {
+    DWORD _array = Read32DWORD(hProcess, spherelist + 0x8);
+    DWORD _count = Read32DWORD(hProcess, _array + 0xC);
+    for ( int i = 0 ; i < _count ; ++i ) {
+        DWORD sphere = Read32DWORD(hProcess, _array + 0x10 + i * 0x4);
+        if ( sphere == 0 ) continue;
+        printf("[%08X]", sphere);
+
+        char* classnamestr = MonoInstanceGetClassName(hProcess, sphere);
+        printf(" %s", classnamestr);
+        free(classnamestr);
+
+        char* _editorAbsolutePathstr = SphereGetEditorAbsolutePath(hProcess, sphere);
+        printf(" %s\n", _editorAbsolutePathstr);
+        free(_editorAbsolutePathstr);
+
+        SpherePrintTokens(hProcess, sphere);
+    }
+}
+void SpherePrintTokens ( HANDLE hProcess, DWORD sphere ) {
+    DWORD _tokens = SphereGetTokenList(hProcess, sphere);
+    DWORD _array = Read32DWORD(hProcess, _tokens + 0x8);
+    DWORD _count = Read32DWORD(hProcess, _array + 0xC);
+    for ( int i = 0 ; i < _count ; ++i ) {
+        DWORD token = Read32DWORD(hProcess, _array + 0x10 + i * 0x4);
+        if ( token == 0 ) continue;
+        printf("[%08X]", token);
+
+        char* classnamestr = MonoInstanceGetClassName(hProcess, token);
+        printf(" %s", classnamestr);
+        free(classnamestr);
+
+        char* fullpath = TokenGetFullPath(hProcess, token);
+        printf(" %s\n", fullpath);
+        free(fullpath);
+    }
 }
 int SphereGetTokenCountById ( HANDLE hProcess, DWORD sphere, char* id ) {
     DWORD _tokens = SphereGetTokenList(hProcess, sphere);
@@ -186,7 +266,6 @@ int SphereGetTokenCountById ( HANDLE hProcess, DWORD sphere, char* id ) {
 
         DWORD fullpathasstring = Read32DWORD(hProcess, token + 0x24);
         char* fullpathasstringstr = Read32MonoWideString(hProcess, fullpathasstring);
-        printf("Token[%08X]: %s\n", token, fullpathasstringstr);
 
         char* lastunderscore = strrchr(fullpathasstringstr, '_');
         if ( strncmp(fullpathasstringstr, id, lastunderscore - fullpathasstringstr) == 0 ) {
@@ -206,8 +285,7 @@ DWORD SphereGetTokenById ( HANDLE hProcess, DWORD sphere, char* id, int index ) 
         DWORD token = Read32DWORD(hProcess, _array + 0x10 + i * 0x4);
         if ( token == 0 ) continue;
 
-        DWORD fullpathasstring = Read32DWORD(hProcess, token + 0x24);
-        char* fullpathasstringstr = Read32MonoWideString(hProcess, fullpathasstring);
+        char* fullpathasstringstr = TokenGetFullPath(hProcess, token);
 
         char* lastunderscore = strrchr(fullpathasstringstr, '_');
         if ( strncmp(fullpathasstringstr, id, lastunderscore - fullpathasstringstr) == 0 ) {
@@ -222,6 +300,40 @@ DWORD SphereGetTokenById ( HANDLE hProcess, DWORD sphere, char* id, int index ) 
     return 0;
 }
 
+char* TokenGetFullPath ( HANDLE hProcess, DWORD token ) {
+    DWORD fullpathasstring = Read32DWORD(hProcess, token + 0x28);
+    return Read32MonoWideString(hProcess, fullpathasstring);
+}
 DWORD TokenGetPayload ( HANDLE hProcess, DWORD token ) {
-    return Read32DWORD(hProcess, token + 0x28);
+    return Read32DWORD(hProcess, token + 0x2C);
+}
+
+DWORD SituationGetDominionList ( HANDLE hProcess, DWORD situation ) {
+    return Read32DWORD(hProcess, situation + 0x34);
+}
+void SituationPrintDominions ( HANDLE hProcess, DWORD situation ) {
+    DWORD _registeredDominions = SituationGetDominionList(hProcess, situation);
+    DWORD _array = Read32DWORD(hProcess, _registeredDominions + 0x8);
+    DWORD _count = Read32DWORD(hProcess, _array + 0xC);
+    printf("Registered dominions: %d\n", _count);
+    printf("Dominions: %08X\n", _array);
+    for ( int i = 0 ; i < _count ; ++i ) {
+        DWORD dominion = Read32DWORD(hProcess, _array + 0x10 + i * 0x4);
+        if ( dominion == 0 ) continue;
+        printf("[%08X]", dominion);
+
+        char* classnamestr = MonoInstanceGetClassName(hProcess, dominion);
+        printf(" %s", classnamestr);
+
+        char* identifierstr = DominionGetIdentifier(hProcess, dominion);
+        printf(" %s", identifierstr);
+        free(identifierstr);
+
+        char* editableidentifierstr = SituationDominionGetEditableIdentifier(hProcess, dominion);
+        printf(" %s\n", editableidentifierstr);
+        free(editableidentifierstr);
+
+        DWORD _spheres = DominionGetSphereList(hProcess, dominion);
+        SphereListPrintTokens(hProcess, _spheres);
+    }
 }

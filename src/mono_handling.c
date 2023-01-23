@@ -20,11 +20,11 @@ DWORD MonoDomain32GetAssemblyList ( HANDLE hProcess, DWORD monodomain ) {
     // mono-2.0-bdwgc.mono_domain_assembly_foreach
     //   55 8B EC 53 8B 5D 08 8B CB 56 57 | stack management
     //   E8 ???????? | call ????????
-    //   8B 73 ??    | mov esi, [ebx+??]
+    //   8B 73 ??    | mov esi, [ebx+??] {0x58}
     //   85 F6       | test esi, esi
-    BYTE offset = Read32BYTE(hProcess, (DWORD)(intptr_t)hModule + func_address + 0x12);
+    // BYTE offset = Read32BYTE(hProcess, (DWORD)(intptr_t)hModule + func_address + 0x12);
     
-    DWORD assemblylistpointer = Read32DWORD(hProcess, monodomain + offset);
+    DWORD assemblylistpointer = Read32DWORD(hProcess, monodomain + 0x58);
 
     return assemblylistpointer;
 }
@@ -75,11 +75,10 @@ DWORD MonoAssembly32GetNameInternal ( HANDLE hProcess, DWORD monoassembly ) {
     DWORD func_address = FindExportByName(hProcess, hModule, "mono_assembly_get_name_internal");
     // mono-2.0-bdwgc.mono_assembly_get_name_internal
     //   55 8B EC 8B 45 08 | stack management
-    //   83 C0 ??          | add eax, ??
+    //   83 C0 ??          | add eax, ?? {0x08}
     //   5D C3             | stack management
-    BYTE offset = Read32BYTE(hProcess, (DWORD)(intptr_t)hModule + func_address + 0x8);
-
-    DWORD nameinternalpointer = Read32DWORD(hProcess, monoassembly + offset);
+    //BYTE offset = Read32BYTE(hProcess, (DWORD)(intptr_t)hModule + func_address + 0x8);
+    DWORD nameinternalpointer = Read32DWORD(hProcess, monoassembly + 0x8);
 
     return nameinternalpointer;
 }
@@ -87,10 +86,10 @@ DWORD MonoAssembly32GetImage ( HANDLE hProcess, DWORD monoassembly ) {
     HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
     DWORD func_address = FindExportByName(hProcess, hModule, "mono_assembly_get_image");
     // mono-2.0-bdwgc.mono_assembly_get_image
-    // +86 | 8B 78 ?? | mov edi,[eax+??]
-    BYTE offset = Read32BYTE(hProcess, (DWORD)(intptr_t)hModule + func_address + 0x88);
+    // +86 | 8B 78 ?? | mov edi,[eax+??] {0x48}
+    // BYTE offset = Read32BYTE(hProcess, (DWORD)(intptr_t)hModule + func_address + 0x88);
 
-    DWORD imagepointer = Read32DWORD(hProcess, monoassembly + offset);
+    DWORD imagepointer = Read32DWORD(hProcess, monoassembly + 0x48);
 
     return imagepointer;
 }
@@ -173,10 +172,9 @@ DWORD MonoClass32GetName ( HANDLE hProcess, DWORD monoclass ) {
     HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
     DWORD func_address = FindExportByName(hProcess, hModule, "mono_class_get_name");
     // mono-2.0-bdwgc.mono_assembly_get_image
-    // +86 | 8B 78 ?? | mov edi, [eax+??]
-    BYTE offset = Read32BYTE(hProcess, (DWORD)(intptr_t)hModule + func_address + 0x88);
-
-    DWORD namepointer = Read32DWORD(hProcess, monoclass + offset);
+    // +86 | 8B 78 ?? | mov edi, [eax+??] {0x2C}
+    // BYTE offset = Read32BYTE(hProcess, (DWORD)(intptr_t)hModule + func_address + 0x88);
+    DWORD namepointer = Read32DWORD(hProcess, monoclass + 0x2C);
 
     return namepointer;
 }
@@ -184,10 +182,9 @@ DWORD MonoClass32GetNamespace ( HANDLE hProcess, DWORD monoclass ) {
     HMODULE hModule = FindModuleByName(hProcess, "mono-2.0-bdwgc.dll");
     DWORD func_address = FindExportByName(hProcess, hModule, "mono_class_get_namespace");
     // mono-2.0-bdwgc.mono_class_get_namespace
-    // +86 | 8B 78 ?? | mov edi, [eax+??]
-    BYTE offset = Read32BYTE(hProcess, (DWORD)(intptr_t)hModule + func_address + 0x88);
-
-    DWORD namespacepointer = Read32DWORD(hProcess, monoclass + offset);
+    // +86 | 8B 78 ?? | mov edi, [eax+??] {0x30}
+    // BYTE offset = Read32BYTE(hProcess, (DWORD)(intptr_t)hModule + func_address + 0x88);;
+    DWORD namespacepointer = Read32DWORD(hProcess, monoclass + 0x30);
 
     return namespacepointer;
 }
@@ -327,6 +324,14 @@ DWORD MonoVTable32GetDomain ( HANDLE hProcess, DWORD monovtable ) {
     DWORD domain = Read32DWORD(hProcess, monovtable + 0x8);
 
     return domain;
+}
+
+char* MonoInstanceGetClassName ( HANDLE hProcess, DWORD instance ) {
+    DWORD vtable = Read32DWORD(hProcess, instance);
+    DWORD monoclass = MonoVTable32GetClass(hProcess, vtable);
+    DWORD classname = MonoClass32GetName(hProcess, monoclass);
+    char* classnamestr = Read32UTF8String(hProcess, classname);
+    return classnamestr;
 }
 
 void MonoInvokeVoid ( HANDLE hProcess, DWORD instance, char* methodname, int argnum, ... ) {

@@ -7,13 +7,46 @@
 #include "mono_handling.h"
 #include "memory_handling.h"
 
+/*
+    Victory checklist
+    [X] standard Enlightenment (lantern)
+    [ ] Get a job
+    [ ] Apostle Entheate (lantern)
+*/
+
+/*
+    TODO cheats:
+    decrepitude to health
+    freeze timer
+    increase specific card
+    spawn card
+    QOL:
+    fast forward everything until next event
+    auto work
+    auto study
+    important alerts (illness, dread, facination)
+*/
+
 int Something ( ) {
     HANDLE hProcess = FindProcessByExecutable("C:\\Program Files (x86)\\Steam\\steamapps\\common\\Cultist Simulator\\cultistsimulator.exe");
     
     DWORD watchman = GetWatchmanClass(hProcess);
     DWORD hornedaxe = WatchmanGet(hProcess, watchman, "HornedAxe");
 
+    printf("HornedAxe: %08X\n", hornedaxe);
+    EnumerateHornedAxeSpheres(hProcess, hornedaxe);
+
     DWORD tabletop = HornedAxeGetSphereById(hProcess, hornedaxe, "~/tabletop");
+    DWORD windows = HornedAxeGetSphereById(hProcess, hornedaxe, "~/windows");
+
+    printf("Tabletop: %08X\n", tabletop);
+    SpherePrintTokens(hProcess, tabletop);
+    DWORD worktoken = SphereGetTokenById(hProcess, tabletop, "~/tabletop!work", 0);
+    printf("Work token: %08X\n", worktoken);
+    DWORD worksituation = TokenGetPayload(hProcess, worktoken);
+    printf("Work situation: %08X\n", worksituation);
+    SituationPrintDominions(hProcess, worksituation);
+    
     /*
     ~/tabletop!ascensionenlightenmentc
     ~/tabletop!cultlantern_1
@@ -105,11 +138,6 @@ int Something ( ) {
     ~/tabletop!scholarsanskrit
     ~/tabletop!scholarfucine
     */
-    printf("Tabletop: %08X\n", tabletop);
-    int health = SphereGetTokenCountById(hProcess, tabletop, "~/tabletop!health");
-    DWORD health_1 = SphereGetTokenById(hProcess, tabletop, "~/tabletop!health", 0);
-
-    printf("Health: %d\n", health);
     
     //MonoInvokeVoid(hProcess, heart, "Beat", 2, (DWORD)10.0f, (DWORD)10.0f);
     //MonoInvokeVoid(hProcess, worksituation, "Open", 0); // Works
@@ -149,6 +177,10 @@ DWORD GetFirstTokenByAbsolutePathPrefix ( HANDLE hProcess, DWORD hornedaxe, char
         }
     }
     return 0;
+}
+
+void InfodumpSituation ( HANDLE hProcess ) {
+
 }
 
 /*

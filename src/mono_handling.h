@@ -34,6 +34,8 @@ DWORD MonoClass32GetMonoMethodByName ( HANDLE hProcess, DWORD monoclass, char* n
 DWORD MonoVTable32GetClass ( HANDLE hProcess, DWORD monovtable );
 DWORD MonoVTable32GetDomain ( HANDLE hProcess, DWORD monovtable );
 
+char* MonoInstanceGetClassName ( HANDLE hProcess, DWORD instance );
+
 void MonoInvokeVoid ( HANDLE hProcess, DWORD instance, char* methodname, int argnum, ... );
 
 #endif // MONO_HANDLING_H
