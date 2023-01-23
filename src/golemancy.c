@@ -8,23 +8,23 @@
 #include "memory_handling.h"
 
 /*
-    Victory checklist
+    Victory checklist:
     [X] standard Enlightenment (lantern)
-    [ ] Get a job
+    [X] Get a job
     [ ] Apostle Entheate (lantern)
 */
 
 /*
-    TODO cheats:
-    decrepitude to health
-    freeze timer
-    increase specific card
-    spawn card
-    QOL:
-    fast forward everything until next event
-    auto work
-    auto study
-    important alerts (illness, dread, facination)
+    Manipulation:
+    [X] Set situation time
+    [ ] Set card time
+    [ ] Change elementstack count
+    [ ] Spawn card
+    [ ] Kill card
+    [ ] Move cards into spheres
+    [ ] Start situation
+    [ ] Conclude situation
+    [ ] Set token location
 */
 
 int Something ( ) {
@@ -46,6 +46,8 @@ int Something ( ) {
     DWORD worksituation = TokenGetPayload(hProcess, worktoken);
     printf("Work situation: %08X\n", worksituation);
     SituationPrintDominions(hProcess, worksituation);
+
+    SituationSetTime(hProcess, worksituation, 10.0f);
     
     /*
     ~/tabletop!ascensionenlightenmentc

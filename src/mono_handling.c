@@ -338,7 +338,7 @@ void MonoInvokeVoid ( HANDLE hProcess, DWORD instance, char* methodname, int arg
     va_list varargs;
     va_start(varargs, argnum);
 
-    printf("Invoking %s/%d on %08X\n", methodname, argnum, instance);
+    printf("Invoking %s/%d[%08X](", methodname, argnum, instance);
     DWORD instancevtable = Read32DWORD(hProcess, instance);
     DWORD instanceclass = Read32DWORD(hProcess, instancevtable);
 
@@ -369,8 +369,13 @@ void MonoInvokeVoid ( HANDLE hProcess, DWORD instance, char* methodname, int arg
     // arguments
     for ( int i = 0 ; i < argnum ; ++i ) {
         DWORD arg = (DWORD)va_arg(varargs, DWORD);
+        printf("%08X", arg);
+        if ( i < argnum - 1 ) {
+            printf(", ");
+        }
         *(DWORD*)(argsBuffer + i * 4) = arg;
     }
+    printf(")\n");
     va_end(varargs);
 
     // mono_runtime_invoke
@@ -399,7 +404,6 @@ void MonoInvokeVoid ( HANDLE hProcess, DWORD instance, char* methodname, int arg
     *(BYTE* )(codeBuffer + 45) = 0xC3;
 
     WriteProcessMemory(hProcess, args, argsBuffer, 0x1000, NULL);
-    HexDump(hProcess, args, 0x100);
     WriteProcessMemory(hProcess, code, codeBuffer, 0x1000, NULL);
     HANDLE hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)code, NULL, 0, NULL);
     WaitForSingleObject(hThread, INFINITE);

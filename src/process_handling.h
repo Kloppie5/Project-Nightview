@@ -35,6 +35,7 @@ void SpherePrintTokens ( HANDLE hProcess, DWORD sphere );
 int SphereGetTokenCountById ( HANDLE hProcess, DWORD sphere, char* id );
 DWORD SphereGetTokenById ( HANDLE hProcess, DWORD sphere, char* id, int index );
 void SphereListPrintTokens ( HANDLE hProcess, DWORD spherelist );
+
 /*
     Token
 */
@@ -44,8 +45,10 @@ DWORD TokenGetPayload ( HANDLE hProcess, DWORD token );
 /*
     Situation
 */
+
 DWORD SituationGetDominionList ( HANDLE hProcess, DWORD situation );
 void SituationPrintDominions ( HANDLE hProcess, DWORD situation );
-DWORD SituationGetDominionById ( HANDLE hProcess, DWORD situation, char* id );
+DWORD SituationGetTimeShadow ( HANDLE hProcess, DWORD situation );
+void SituationSetTime ( HANDLE hProcess, DWORD situation, float time );
 
 #endif // PROCESS_HANDLING_H

@@ -337,3 +337,10 @@ void SituationPrintDominions ( HANDLE hProcess, DWORD situation ) {
         SphereListPrintTokens(hProcess, _spheres);
     }
 }
+DWORD SituationGetTimeShadow ( HANDLE hProcess, DWORD situation ) {
+    return Read32DWORD(hProcess, situation + 0x3C);
+}
+void SituationSetTime ( HANDLE hProcess, DWORD situation, float time ) {
+    DWORD timeshadow = SituationGetTimeShadow(hProcess, situation);
+    Write32FLOAT(hProcess, timeshadow + 0x8, time);
+}

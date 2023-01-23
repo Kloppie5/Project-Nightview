@@ -227,6 +227,14 @@ int Write32DWORD ( HANDLE hProcess, DWORD address, DWORD value ) {
     }
     return 1;
 }
+int Write32FLOAT ( HANDLE hProcess, DWORD address, FLOAT value ) {
+    SIZE_T lpNumberOfBytesWritten;
+    if ( !WriteProcessMemory(hProcess, (LPVOID)address, &value, sizeof(float), &lpNumberOfBytesWritten) ) {
+        printf("Failed to write process memory; %d\n", GetLastError());
+        exit(1);
+    }
+    return 1;
+}
 char* Read32UTF8String ( HANDLE hProcess, DWORD address ) {
     char* result = (char*)malloc(256);
     SIZE_T lpNumberOfBytesRead;
